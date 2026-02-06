@@ -1,0 +1,25 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+  sql:
+    init:
+      mode: never
+
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: com.realtime.chat.event
+        isolation.level: read_committed
+
+jwt:
+  secret: test-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm
+  expiration: 86400000
+
+logging:
+  level:
+    com.realtime.chat: DEBUG
