@@ -42,5 +42,11 @@ out/
 ### Logs ###
 *.log
 
+### Docker ###
+docker-compose.override.yml
+
 ### Env ###
 .env
+
+### Claude Code ###
+.claude/
