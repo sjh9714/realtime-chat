@@ -65,10 +65,19 @@ docker compose up -d
 - `GET /api/rooms/{roomId}/messages?cursor={id}&size={n}` — 메시지 이력 (커서 페이지네이션)
 - `POST /api/rooms/{roomId}/read` — 읽음 처리
 
+### 온라인 상태
+- `GET /api/rooms/{roomId}/members/online` — 채팅방 온라인 멤버 조회
+
 ### WebSocket
 - STOMP 엔드포인트: `/ws`
 - 메시지 전송: `/app/chat.send`
-- 구독: `/topic/room.{roomId}`
+- 구독 (메시지): `/topic/room.{roomId}`
+- 구독 (접속 상태): `/topic/presence`
+
+### Actuator
+- `GET /actuator/health` — 헬스 체크 (permitAll)
+- `GET /actuator/info` — 앱 정보
+- `GET /actuator/metrics` — 메트릭
 
 ## 코딩 컨벤션
 

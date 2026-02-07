@@ -69,7 +69,8 @@ public class MessagePersistenceConsumer {
             log.debug("메시지 저장 완료: messageKey={}, id={}", event.getMessageKey(), message.getId());
 
         } catch (Exception e) {
-            log.error("메시지 저장 실패: messageKey={}", event.getMessageKey(), e);
+            log.error("메시지 저장 실패: messageKey={}, topic={}, partition={}, offset={}",
+                    event.getMessageKey(), record.topic(), record.partition(), record.offset(), e);
             throw e; // ErrorHandler가 재시도 후 DLT로 보냄
         }
     }

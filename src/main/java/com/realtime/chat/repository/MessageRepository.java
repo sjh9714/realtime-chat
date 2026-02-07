@@ -13,6 +13,12 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     // 멱등성 체크: 동일 messageKey 존재 여부
     boolean existsByMessageKey(UUID messageKey);
 
+    // 멱등성 테스트: messageKey로 카운트
+    long countByMessageKey(UUID messageKey);
+
+    // messageKey로 메시지 조회
+    java.util.Optional<Message> findByMessageKey(UUID messageKey);
+
     // 커서 기반 페이지네이션: cursor보다 작은 id의 메시지를 size+1개 조회 (hasMore 판단)
     @Query("""
             SELECT m FROM Message m

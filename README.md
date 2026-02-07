@@ -53,8 +53,9 @@ Client (WebSocket/STOMP)
 | 부하 테스트 | k6 | WebSocket 프로토콜 부하 테스트 (예정) |
 | 모니터링 | Prometheus, Grafana, Kafka UI | Consumer Lag, 레이턴시 p50/p95/p99 (예정) |
 
-## 구현 완료 (MVP)
+## 구현 완료
 
+### 1차: MVP
 - [x] JWT 회원가입 / 로그인
 - [x] 1:1 채팅방 생성 (중복 방지)
 - [x] 그룹 채팅방 생성 / 참여
@@ -64,6 +65,14 @@ Client (WebSocket/STOMP)
 - [x] Kafka Consumer 멱등성 (messageKey UUID + DB UK)
 - [x] Consumer 에러 핸들링 (3회 재시도 → DLT)
 - [x] 통합 테스트 (Testcontainers)
+
+### 2차: 프로덕션 품질
+- [x] Health Check + Graceful Shutdown (Spring Actuator)
+- [x] Rate Limiting (WebSocket ChannelInterceptor, 10msg/sec 슬라이딩 윈도우)
+- [x] Consumer DLT 심화 (DeadLetterPublishingRecoverer, 에러 로깅 강화)
+- [x] 온라인/오프라인 상태 표시 (Redis presence + WebSocket 이벤트 + Pub/Sub)
+- [x] WebSocket 스케일아웃 (Dockerfile + docker-compose 멀티 인스턴스)
+- [x] 통합 테스트 확장 (20개 테스트, Testcontainers)
 
 ## 핵심 기술 챌린지
 
@@ -108,4 +117,8 @@ docker compose up -d
 
 # 테스트
 ./gradlew test
+
+# 멀티 인스턴스 실행 (스케일아웃)
+docker compose --profile app up -d
+# app-1: localhost:8081, app-2: localhost:8082
 ```

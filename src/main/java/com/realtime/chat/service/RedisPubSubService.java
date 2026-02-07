@@ -2,6 +2,7 @@ package com.realtime.chat.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.realtime.chat.config.RedisConfig;
+import com.realtime.chat.dto.PresenceEvent;
 import com.realtime.chat.event.ChatMessageEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,28 @@ public class RedisPubSubService {
             log.debug("Redis 발행: channel={}, messageKey={}", channel, event.getMessageKey());
         } catch (Exception e) {
             log.error("Redis 발행 실패: messageKey={}", event.getMessageKey(), e);
+        }
+    }
+
+    // Redis 채널에 Presence 이벤트 발행 (서버 간 상태 공유)
+    public void publishPresence(PresenceEvent event) {
+        try {
+            String message = objectMapper.writeValueAsString(event);
+            redisTemplate.convertAndSend(RedisConfig.PRESENCE_CHANNEL, message);
+            log.debug("Presence 발행: userId={}, status={}", event.getUserId(), event.getStatus());
+        } catch (Exception e) {
+            log.error("Presence 발행 실패: userId={}", event.getUserId(), e);
+        }
+    }
+
+    // Redis 구독 Presence 이벤트 수신 → STOMP로 전체 브로드캐스트
+    public void onPresenceMessage(String message, String channel) {
+        try {
+            PresenceEvent event = objectMapper.readValue(message, PresenceEvent.class);
+            messagingTemplate.convertAndSend("/topic/presence", event);
+            log.debug("Presence 브로드캐스트: userId={}, status={}", event.getUserId(), event.getStatus());
+        } catch (Exception e) {
+            log.error("Presence 브로드캐스트 실패: channel={}", channel, e);
         }
     }
 

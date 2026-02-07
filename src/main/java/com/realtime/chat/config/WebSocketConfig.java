@@ -14,6 +14,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final WebSocketAuthInterceptor webSocketAuthInterceptor;
+    private final RateLimitInterceptor rateLimitInterceptor;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
@@ -31,7 +32,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        // STOMP CONNECT 프레임에서 JWT 검증
-        registration.interceptors(webSocketAuthInterceptor);
+        // STOMP CONNECT 프레임에서 JWT 검증 + Rate Limiting
+        registration.interceptors(webSocketAuthInterceptor, rateLimitInterceptor);
     }
 }

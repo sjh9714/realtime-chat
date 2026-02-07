@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.realtime.chat.dto.AuthResponse;
 import com.realtime.chat.dto.LoginRequest;
 import com.realtime.chat.dto.SignupRequest;
+import com.realtime.chat.repository.ChatRoomMemberRepository;
+import com.realtime.chat.repository.ChatRoomRepository;
+import com.realtime.chat.repository.MessageRepository;
 import com.realtime.chat.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +35,15 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
+    private MessageRepository messageRepository;
+
+    @Autowired
+    private ChatRoomMemberRepository chatRoomMemberRepository;
+
+    @Autowired
+    private ChatRoomRepository chatRoomRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     private String baseUrl;
@@ -39,6 +51,9 @@ class AuthIntegrationTest extends BaseIntegrationTest {
     @BeforeEach
     void setUp() {
         baseUrl = "http://localhost:" + port + "/api/auth";
+        messageRepository.deleteAll();
+        chatRoomMemberRepository.deleteAll();
+        chatRoomRepository.deleteAll();
         userRepository.deleteAll();
     }
 

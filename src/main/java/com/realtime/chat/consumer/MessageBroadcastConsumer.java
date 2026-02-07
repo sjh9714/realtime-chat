@@ -30,7 +30,8 @@ public class MessageBroadcastConsumer {
             redisPubSubService.publish(event);
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("브로드캐스트 실패: messageKey={}", event.getMessageKey(), e);
+            log.error("브로드캐스트 실패: messageKey={}, topic={}, partition={}, offset={}",
+                    event.getMessageKey(), record.topic(), record.partition(), record.offset(), e);
             throw e;
         }
     }

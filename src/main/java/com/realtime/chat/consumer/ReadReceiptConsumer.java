@@ -30,7 +30,8 @@ public class ReadReceiptConsumer {
             readReceiptService.processReadReceipt(event);
             ack.acknowledge();
         } catch (Exception e) {
-            log.error("읽음 처리 실패: roomId={}, userId={}", event.getRoomId(), event.getUserId(), e);
+            log.error("읽음 처리 실패: roomId={}, userId={}, topic={}, partition={}, offset={}",
+                    event.getRoomId(), event.getUserId(), record.topic(), record.partition(), record.offset(), e);
             throw e;
         }
     }
