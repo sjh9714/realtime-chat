@@ -7,6 +7,7 @@
 
 ## 목차
 
+### 1차: MVP
 1. [프로젝트 전체 그림](#1-프로젝트-전체-그림)
 2. [기술 스택 개념 정리](#2-기술-스택-개념-정리)
 3. [프로젝트 구조 이해하기](#3-프로젝트-구조-이해하기)
@@ -20,6 +21,13 @@
 11. [STEP 8: 테스트](#11-step-8-테스트)
 12. [메시지 전체 흐름 따라가기](#12-메시지-전체-흐름-따라가기)
 13. [자주 묻는 질문](#13-자주-묻는-질문)
+
+### 2차: 프로덕션 품질
+14. [STEP 9: Health Check + Graceful Shutdown](#14-step-9-health-check--graceful-shutdown)
+15. [STEP 10: Rate Limiting](#15-step-10-rate-limiting)
+16. [STEP 11: Consumer DLT 심화](#16-step-11-consumer-dlt-심화)
+17. [STEP 12: 온라인/오프라인 상태](#17-step-12-온라인오프라인-상태)
+18. [STEP 13: 스케일아웃 + 통합 테스트](#18-step-13-스케일아웃--통합-테스트)
 
 ---
 
@@ -1618,5 +1626,881 @@ Consumer Group을 분리하면:
 
 ---
 
+---
+
+# 2차: 프로덕션 품질
+
+> 1차(MVP)에서 "동작하는 코드"를 만들었다면, 2차에서는 **"운영 가능한 코드"**로 발전시킵니다.
+> 실제 서비스에서 필요한 안정성, 보호, 모니터링, 스케일아웃을 추가합니다.
+
+---
+
+## 14. STEP 9: Health Check + Graceful Shutdown
+
+### 왜 필요한가?
+
+```
+[문제 1: Health Check 없을 때]
+로드 밸런서(Nginx, K8s): "서버 살아있어?" → 확인 방법 없음
+→ 죽은 서버로 요청을 계속 보냄 → 장애 확산!
+
+[해결] /actuator/health 엔드포인트
+로드 밸런서: GET /actuator/health → {"status": "UP"} → 정상!
+로드 밸런서: GET /actuator/health → 응답 없음 → 이 서버 제외!
+
+[문제 2: Graceful Shutdown 없을 때]
+서버 종료 명령 → 바로 프로세스 종료
+→ 처리 중이던 메시지, DB 트랜잭션, WebSocket 연결 모두 끊김!
+
+[해결] Graceful Shutdown
+서버 종료 명령 → "새 요청은 거부, 기존 요청은 30초 내로 마무리" → 깔끔하게 종료
+```
+
+### application.yml 설정
+
+```yaml
+server:
+  shutdown: graceful            # Graceful Shutdown 활성화
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s  # 진행 중인 요청 마무리 대기 시간
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics  # 노출할 Actuator 엔드포인트
+  endpoint:
+    health:
+      show-details: always     # DB, Kafka, Redis 연결 상태까지 표시
+      show-components: always
+```
+
+**Actuator 엔드포인트가 뭐야?**
+```
+Spring Boot가 기본 제공하는 운영 정보 API:
+
+/actuator/health    → 서버 + DB + Kafka + Redis 상태 (UP/DOWN)
+/actuator/info      → 앱 이름, 버전 등 기본 정보
+/actuator/metrics   → JVM 메모리, HTTP 요청 수, GC 횟수 등 수치 데이터
+
+health 응답 예시:
+{
+  "status": "UP",
+  "components": {
+    "db": { "status": "UP" },
+    "kafka": { "status": "UP" },
+    "redis": { "status": "UP" }
+  }
+}
+```
+
+### SecurityConfig.java — Health Check 허용
+
+```java
+.authorizeHttpRequests(auth -> auth
+        .requestMatchers("/api/auth/**").permitAll()
+        .requestMatchers("/ws/**").permitAll()
+        .requestMatchers("/actuator/health/**").permitAll()  // ← 추가!
+        .anyRequest().authenticated())
+```
+
+**왜 permitAll?**
+```
+Health Check는 로드 밸런서/K8s가 호출하는데,
+이들은 JWT 토큰이 없음 → 인증 없이 접근 가능해야 함
+
+/actuator/info, /actuator/metrics는 인증 필요 (보안 정보 포함 가능)
+→ authenticated() 그대로 유지
+```
+
+### Graceful Shutdown 동작 흐름
+
+```
+1. docker stop 또는 kill -15 (SIGTERM) 전송
+2. Spring Boot가 SIGTERM 수신
+3. 새 HTTP 요청/WebSocket 연결 거부
+4. 진행 중인 요청 마무리 대기 (최대 30초)
+5. Kafka Consumer 정상 종료 (offset 커밋)
+6. DB 커넥션 풀 정리
+7. 프로세스 종료
+
+→ 메시지 유실 없이 깔끔하게 종료!
+```
+
+---
+
+## 15. STEP 10: Rate Limiting
+
+### 왜 필요한가?
+
+```
+[문제] 악의적 사용자가 1초에 10,000개 메시지를 전송하면?
+→ Kafka에 메시지 폭탄 → Consumer 처리 지연 → 모든 사용자 채팅 느려짐
+→ DB INSERT 폭주 → 디스크/CPU 과부하
+
+[해결] 유저별 초당 메시지 수 제한
+→ 기본 10개/초, 초과 시 STOMP ERROR 프레임 전송
+→ 정상 사용자는 영향 없음 (사람이 1초에 10개 이상 타이핑 불가능)
+```
+
+### RateLimitInterceptor.java — 핵심 코드
+
+```java
+@Component
+public class RateLimitInterceptor implements ChannelInterceptor {
+
+    // 유저별 카운터 저장소 (서버 메모리)
+    private final ConcurrentHashMap<Long, RateWindow> rateLimitMap = new ConcurrentHashMap<>();
+
+    @Override
+    public Message<?> preSend(Message<?> message, MessageChannel channel) {
+        // STOMP SEND 프레임만 체크 (CONNECT, SUBSCRIBE 등은 무시)
+        if (!StompCommand.SEND.equals(accessor.getCommand())) {
+            return message;
+        }
+
+        Long userId = Long.parseLong(user.getName());
+        RateWindow window = rateLimitMap.computeIfAbsent(userId, k -> new RateWindow());
+
+        if (!window.tryAcquire(messagesPerSecond)) {
+            log.warn("Rate limit 초과: userId={}", userId);
+            throw new IllegalStateException("메시지 전송 속도 제한을 초과했습니다.");
+        }
+        return message;
+    }
+
+    // 1초 슬라이딩 윈도우 카운터
+    private static class RateWindow {
+        private final AtomicLong windowStart = new AtomicLong(System.currentTimeMillis());
+        private final AtomicInteger count = new AtomicInteger(0);
+
+        boolean tryAcquire(int limit) {
+            long now = System.currentTimeMillis();
+
+            // 1초 경과 → 카운터 리셋
+            if (now - windowStart.get() >= 1000) {
+                windowStart.set(now);
+                count.set(1);
+                return true;
+            }
+
+            // 제한 이내면 통과, 초과면 차단
+            return count.incrementAndGet() <= limit;
+        }
+    }
+}
+```
+
+**왜 ConcurrentHashMap?**
+```
+WebSocket 메시지는 여러 스레드에서 동시에 처리됨
+→ 일반 HashMap을 쓰면 동시 접근 시 데이터가 깨질 수 있음
+→ ConcurrentHashMap: 동시 접근에도 안전한 HashMap
+
+AtomicInteger, AtomicLong도 같은 이유:
+→ 여러 스레드가 동시에 count++ 해도 정확하게 동작
+→ synchronized보다 가볍고 빠름
+```
+
+**슬라이딩 윈도우 vs 고정 윈도우:**
+```
+[고정 윈도우]
+00:00:00 ~ 00:00:01 → 10개 허용
+00:00:01 ~ 00:00:02 → 10개 허용
+문제: 00:00:00.9에 10개, 00:00:01.0에 10개 → 0.1초에 20개!
+
+[슬라이딩 윈도우 (우리 방식)]
+"지금부터 1초 전까지" 윈도우로 판단
+→ 1초 경과 시 카운터를 리셋
+→ 간단하면서도 실용적인 방식
+```
+
+### WebSocketConfig.java — 인터셉터 등록
+
+```java
+@Override
+public void configureClientInboundChannel(ChannelRegistration registration) {
+    // 순서가 중요! 인증 → Rate Limiting
+    registration.interceptors(webSocketAuthInterceptor, rateLimitInterceptor);
+}
+```
+
+```
+STOMP 메시지 도착
+    │
+    ▼
+[WebSocketAuthInterceptor]  ← 1순위: JWT 검증 (누구인지 확인)
+    │
+    ▼
+[RateLimitInterceptor]      ← 2순위: 속도 제한 (초당 10개 초과 시 차단)
+    │
+    ▼
+[@MessageMapping 핸들러]    ← 통과한 메시지만 비즈니스 로직 실행
+```
+
+---
+
+## 16. STEP 11: Consumer DLT 심화
+
+### 1차에서의 문제점
+
+```
+[1차 구현]
+DefaultErrorHandler + FixedBackOff(1000, 3)
+→ 3번 재시도 후... 그냥 로그만 남기고 포기
+→ 실패한 메시지가 어디에도 남지 않음!
+
+[2차 개선]
+DefaultErrorHandler + DeadLetterPublishingRecoverer + FixedBackOff(1000, 3)
+→ 3번 재시도 후 → DLT 토픽에 메시지 격리 + 상세 에러 로깅
+→ 실패 메시지를 나중에 확인/재처리 가능!
+```
+
+### DeadLetterPublishingRecoverer란?
+
+```
+정상 메시지:
+chat.messages → Consumer 처리 성공 → DB 저장 완료
+
+실패 메시지:
+chat.messages → Consumer 처리 실패 (3회 재시도)
+              → DeadLetterPublishingRecoverer가 chat.messages.dlt로 전송
+              → 관리자가 나중에 확인
+
+DLT = Dead Letter Topic (죽은 편지함)
+= 배달 실패한 우편물을 보관하는 곳
+```
+
+### KafkaConfig.java — DLT 설정
+
+```java
+// DLT 토픽 생성
+@Bean
+public NewTopic messagesDltTopic() {
+    return TopicBuilder.name(MESSAGES_DLT)    // "chat.messages.dlt"
+            .partitions(1)                     // 실패 메시지용이므로 1개면 충분
+            .replicas(1)
+            .build();
+}
+
+@Bean
+public NewTopic readReceiptsDltTopic() {
+    return TopicBuilder.name(READ_RECEIPTS_DLT)  // "chat.read-receipts.dlt"
+            .partitions(1)
+            .replicas(1)
+            .build();
+}
+
+// DLT Recoverer: 재시도 실패 시 원본 토픽 + ".dlt"로 전송
+private DeadLetterPublishingRecoverer deadLetterRecoverer(KafkaTemplate<String, Object> kafkaTemplate) {
+    return new DeadLetterPublishingRecoverer(kafkaTemplate,
+            (ConsumerRecord<?, ?> record, Exception ex) -> {
+                log.error("DLT 전송: topic={}, partition={}, offset={}, error={}",
+                        record.topic(), record.partition(), record.offset(), ex.getMessage());
+                return new TopicPartition(
+                        record.topic() + ".dlt",   // chat.messages → chat.messages.dlt
+                        record.partition() % 1);    // DLT는 파티션 1개이므로 항상 0
+            });
+}
+
+// 모든 Consumer Factory에 DLT 연결
+private ConcurrentKafkaListenerContainerFactory<String, Object> createListenerFactory(
+        String groupId, KafkaTemplate<String, Object> kafkaTemplate) {
+    // ...
+    DefaultErrorHandler errorHandler = new DefaultErrorHandler(
+            deadLetterRecoverer(kafkaTemplate),  // ← DLT Recoverer 연결!
+            new FixedBackOff(1000L, 3)           // 1초 간격, 3회 재시도
+    );
+    factory.setCommonErrorHandler(errorHandler);
+    return factory;
+}
+```
+
+**실패 처리 전체 흐름:**
+```
+메시지 도착 → Consumer 처리 시도
+    │
+    ├── 성공 → ack.acknowledge() → 다음 메시지 처리
+    │
+    └── 실패 → DefaultErrorHandler 개입
+                │
+                ├── 1회차 재시도 (1초 후) → 실패
+                ├── 2회차 재시도 (1초 후) → 실패
+                └── 3회차 재시도 (1초 후) → 실패
+                    │
+                    ▼
+              DeadLetterPublishingRecoverer
+              → chat.messages.dlt에 원본 메시지 + 에러 정보 저장
+              → Kafka UI(localhost:8090)에서 DLT 토픽 확인 가능
+```
+
+### 에러 로깅 강화
+
+```java
+// MessagePersistenceConsumer.java
+catch (Exception e) {
+    log.error("메시지 저장 실패: messageKey={}, topic={}, partition={}, offset={}",
+            event.getMessageKey(),
+            record.topic(),        // ← 어느 토픽에서 왔는지
+            record.partition(),    // ← 몇 번 파티션인지
+            record.offset(), e);   // ← 몇 번째 메시지인지
+    throw e;  // 다시 던져야 ErrorHandler가 재시도 + DLT 처리
+}
+```
+
+**왜 topic, partition, offset을 로깅하나?**
+```
+"메시지 저장 실패: messageKey=abc-123"
+→ 어떤 메시지인지는 알겠는데, 어디서 문제가 생겼는지 모름
+
+"메시지 저장 실패: messageKey=abc-123, topic=chat.messages, partition=3, offset=42"
+→ Kafka UI에서 partition 3, offset 42를 찾아서 원본 메시지 확인 가능
+→ 디버깅 시간이 크게 단축됨
+```
+
+---
+
+## 17. STEP 12: 온라인/오프라인 상태
+
+### 전체 설계
+
+```
+사용자 A가 WebSocket 연결
+
+[이벤트 감지]
+SessionConnectEvent 발생
+    │
+    ▼
+[WebSocketEventListener]
+    │
+    ├── PresenceService.setOnline(userId)     → Redis에 "user:presence:1" = "ONLINE" (TTL 60초)
+    │
+    └── RedisPubSubService.publishPresence()  → Redis "chat:presence" 채널에 발행
+            │
+            ▼
+    [모든 서버 인스턴스]
+    RedisPubSubService.onPresenceMessage()    → STOMP "/topic/presence"로 브로드캐스트
+            │
+            ▼
+    [구독 중인 모든 클라이언트]
+    { "userId": 1, "status": "ONLINE", "timestamp": 1707350400000 }
+```
+
+### PresenceEvent.java — 상태 이벤트 DTO
+
+```java
+@Getter
+@NoArgsConstructor
+@AllArgsConstructor
+public class PresenceEvent {
+    private Long userId;
+    private String status;    // "ONLINE" or "OFFLINE"
+    private long timestamp;
+
+    // 팩토리 메서드: new 대신 의미 있는 이름으로 생성
+    public static PresenceEvent online(Long userId) {
+        return new PresenceEvent(userId, "ONLINE", System.currentTimeMillis());
+    }
+
+    public static PresenceEvent offline(Long userId) {
+        return new PresenceEvent(userId, "OFFLINE", System.currentTimeMillis());
+    }
+}
+```
+
+### PresenceService.java — Redis 기반 상태 관리
+
+```java
+@Service
+public class PresenceService {
+
+    private static final String PRESENCE_KEY_PREFIX = "user:presence:";
+    private static final Duration PRESENCE_TTL = Duration.ofSeconds(60);  // TTL 60초
+
+    // 온라인 설정: Redis에 키 생성 + TTL
+    public void setOnline(Long userId) {
+        String key = PRESENCE_KEY_PREFIX + userId;      // "user:presence:1"
+        redisTemplate.opsForValue().set(key, "ONLINE", PRESENCE_TTL);
+    }
+
+    // 오프라인 설정: Redis에서 키 삭제
+    public void setOffline(Long userId) {
+        String key = PRESENCE_KEY_PREFIX + userId;
+        redisTemplate.delete(key);
+    }
+
+    // 온라인 여부 확인: 키가 존재하면 온라인
+    public boolean isOnline(Long userId) {
+        String key = PRESENCE_KEY_PREFIX + userId;
+        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+    }
+
+    // 채팅방 멤버 중 온라인인 유저 목록
+    public Set<Long> getOnlineMembers(Long roomId) {
+        List<Long> memberUserIds = chatRoomMemberRepository.findAllByChatRoomId(roomId)
+                .stream()
+                .map(member -> member.getUser().getId())
+                .collect(Collectors.toList());
+
+        return memberUserIds.stream()
+                .filter(this::isOnline)     // Redis에서 각 멤버의 온라인 상태 확인
+                .collect(Collectors.toSet());
+    }
+}
+```
+
+**TTL(Time To Live)이 왜 60초?**
+```
+[문제] 서버가 비정상 종료되면?
+→ SessionDisconnectEvent가 발생하지 않음
+→ Redis에 "user:presence:1" = "ONLINE"이 영원히 남음
+→ 오프라인인데 온라인으로 표시!
+
+[해결] TTL 60초
+→ 60초 후 자동 삭제 → 오프라인으로 자동 전환
+→ 정상 연결 중이면? heartbeat로 TTL 갱신 (아직 미구현, 3차 예정)
+
+비유: 출석 체크
+"60초 안에 한 번은 출석 체크해야 함"
+→ 체크 안 하면 퇴실 처리 (자동 오프라인)
+```
+
+### WebSocketEventListener.java — 연결/해제 감지
+
+```java
+@Component
+public class WebSocketEventListener {
+
+    // WebSocket 연결 시 → 온라인
+    @EventListener
+    public void handleWebSocketConnect(SessionConnectEvent event) {
+        Long userId = extractUserId(event.getMessage().getHeaders().get("simpUser"));
+        if (userId != null) {
+            presenceService.setOnline(userId);                          // Redis 설정
+            redisPubSubService.publishPresence(PresenceEvent.online(userId));  // 브로드캐스트
+        }
+    }
+
+    // WebSocket 해제 시 → 오프라인
+    @EventListener
+    public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
+        Long userId = extractUserId(event.getUser());
+        if (userId != null) {
+            presenceService.setOffline(userId);                          // Redis 삭제
+            redisPubSubService.publishPresence(PresenceEvent.offline(userId));  // 브로드캐스트
+        }
+    }
+
+    // Principal에서 userId 추출
+    private Long extractUserId(Object principal) {
+        if (principal instanceof UsernamePasswordAuthenticationToken auth) {
+            return (Long) auth.getPrincipal();
+            // WebSocketAuthInterceptor에서 설정한 인증 정보
+        }
+        return null;
+    }
+}
+```
+
+**@EventListener가 뭐야?**
+```
+Spring의 이벤트 시스템:
+→ 특정 이벤트가 발생하면 자동으로 호출되는 메서드
+
+SessionConnectEvent:    STOMP CONNECT 프레임 수신 시 발생
+SessionDisconnectEvent: WebSocket 연결 끊김 시 발생 (클라이언트가 끊거나 네트워크 장애)
+
+장점: WebSocket 코드를 수정하지 않고 이벤트만 감지해서 처리
+→ 느슨한 결합 (Loose Coupling)
+```
+
+### RedisConfig.java — Presence 채널 구독
+
+```java
+@Configuration
+public class RedisConfig {
+    public static final String PRESENCE_CHANNEL = "chat:presence";
+
+    @Bean
+    public RedisMessageListenerContainer redisMessageListenerContainer(
+            RedisConnectionFactory connectionFactory,
+            MessageListenerAdapter messageListenerAdapter,        // 채팅 메시지용
+            MessageListenerAdapter presenceListenerAdapter) {     // Presence용 (추가!)
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        // 채팅 메시지: 패턴 구독 (chat:room:*)
+        container.addMessageListener(messageListenerAdapter, new PatternTopic(CHAT_ROOM_PATTERN));
+        // Presence: 정확한 채널 구독 (chat:presence)
+        container.addMessageListener(presenceListenerAdapter, new ChannelTopic(PRESENCE_CHANNEL));
+        return container;
+    }
+
+    @Bean
+    public MessageListenerAdapter presenceListenerAdapter(RedisPubSubService redisPubSubService) {
+        return new MessageListenerAdapter(redisPubSubService, "onPresenceMessage");
+        //                                                     ↑ 이 메서드를 호출
+    }
+}
+```
+
+**PatternTopic vs ChannelTopic:**
+```
+PatternTopic("chat:room:*")
+→ chat:room:1, chat:room:2, chat:room:999 등 모든 채팅방 채널 구독
+→ 와일드카드 패턴 매칭
+
+ChannelTopic("chat:presence")
+→ 정확히 "chat:presence" 채널만 구독
+→ Presence는 채널이 1개이므로 정확한 매칭 사용
+```
+
+### RedisPubSubService.java — Presence 브로드캐스트
+
+```java
+// Redis 채널에 Presence 이벤트 발행 (서버 간 상태 공유)
+public void publishPresence(PresenceEvent event) {
+    String message = objectMapper.writeValueAsString(event);
+    redisTemplate.convertAndSend(RedisConfig.PRESENCE_CHANNEL, message);
+    //                           "chat:presence"
+}
+
+// Redis에서 Presence 이벤트 수신 → STOMP로 전체 브로드캐스트
+public void onPresenceMessage(String message, String channel) {
+    PresenceEvent event = objectMapper.readValue(message, PresenceEvent.class);
+    messagingTemplate.convertAndSend("/topic/presence", event);
+    // 이 서버에서 /topic/presence를 구독 중인 모든 클라이언트에게 전달
+}
+```
+
+**온라인 상태 전체 흐름 (서버 2대):**
+```
+사용자A가 서버1에 WebSocket 연결
+
+[서버 1]
+SessionConnectEvent → WebSocketEventListener
+    → PresenceService.setOnline(1)         → Redis: SET user:presence:1 "ONLINE" EX 60
+    → RedisPubSubService.publishPresence() → Redis: PUBLISH "chat:presence" {...}
+
+[Redis Pub/Sub]
+"chat:presence" 채널에 메시지 발행
+    → 구독 중인 서버 1, 서버 2 모두에게 전달
+
+[서버 1] onPresenceMessage()
+    → messagingTemplate.convertAndSend("/topic/presence", event)
+    → 서버1에 연결된 클라이언트들에게 전달
+
+[서버 2] onPresenceMessage()
+    → messagingTemplate.convertAndSend("/topic/presence", event)
+    → 서버2에 연결된 클라이언트들에게 전달
+
+결과: 어느 서버에 연결되어 있든 모든 클라이언트가 "사용자A 접속" 알림 수신!
+```
+
+### PresenceController.java — REST API
+
+```java
+@RestController
+@RequestMapping("/api/rooms")
+public class PresenceController {
+
+    // GET /api/rooms/{roomId}/members/online → [1, 3, 5] (온라인 유저 ID 목록)
+    @GetMapping("/{roomId}/members/online")
+    public ResponseEntity<Set<Long>> getOnlineMembers(@PathVariable Long roomId) {
+        return ResponseEntity.ok(presenceService.getOnlineMembers(roomId));
+    }
+}
+```
+
+```
+클라이언트가 채팅방에 입장할 때:
+1. WebSocket으로 /topic/presence 구독 → 실시간 상태 변경 수신
+2. REST API로 현재 온라인 멤버 목록 조회 → 초기 상태 표시
+
+이후: WebSocket으로 상태 변경만 수신 → REST API 호출 불필요 (효율적)
+```
+
+---
+
+## 18. STEP 13: 스케일아웃 + 통합 테스트
+
+### Dockerfile — Multi-stage 빌드
+
+```dockerfile
+# 1단계: 빌드 (JDK 필요)
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /app
+COPY gradle/ gradle/
+COPY gradlew build.gradle.kts settings.gradle.kts ./
+RUN chmod +x gradlew && ./gradlew dependencies --no-daemon || true  # 의존성 캐싱
+COPY src/ src/
+RUN ./gradlew bootJar --no-daemon -x test  # JAR 생성 (테스트 스킵)
+
+# 2단계: 실행 (JRE만 필요)
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=build /app/build/libs/*.jar app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+**Multi-stage 빌드가 왜 좋아?**
+```
+[단일 스테이지]
+JDK(~400MB) + 소스 + Gradle + 빌드 결과 = ~800MB 이미지
+
+[Multi-stage]
+1단계(빌드): JDK + 소스 + Gradle → JAR 파일 생성
+2단계(실행): JRE(~200MB) + JAR 파일만 = ~250MB 이미지
+→ 3배 이상 이미지 크기 감소!
+→ 소스 코드가 최종 이미지에 포함되지 않음 (보안)
+```
+
+**의존성 캐싱 트릭:**
+```
+COPY gradlew build.gradle.kts settings.gradle.kts ./
+RUN ./gradlew dependencies                           ← 의존성만 먼저 다운로드
+
+COPY src/ src/                                        ← 소스 코드 복사
+RUN ./gradlew bootJar                                 ← 빌드
+
+이렇게 분리하면:
+소스 코드만 변경 시 → 의존성 레이어는 Docker 캐시에서 재사용
+→ 빌드 시간 대폭 단축 (의존성 다시 다운로드 안 함)
+```
+
+### docker-compose.yml — 멀티 인스턴스
+
+```yaml
+# 애플리케이션 서버 (스케일아웃 검증용 2대)
+app-1:
+    build: .                    # 프로젝트 루트의 Dockerfile로 빌드
+    container_name: chat-app-1
+    environment:
+      DB_HOST: postgres         # Docker 내부 네트워크에서 컨테이너 이름으로 접근
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092  # Docker 내부에서는 9092 포트
+    ports:
+      - "8081:8080"             # 호스트 8081 → 컨테이너 8080
+    depends_on:
+      postgres:
+        condition: service_healthy  # PostgreSQL 준비될 때까지 대기
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+app-2:
+    build: .
+    container_name: chat-app-2
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8082:8080"             # 호스트 8082 → 컨테이너 8080
+    depends_on: ...
+```
+
+**환경변수 fallback 패턴:**
+```yaml
+# application.yml
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/chat
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+```
+
+```
+${DB_HOST:localhost} 의미:
+→ 환경변수 DB_HOST가 있으면 그 값 사용 (Docker: "postgres")
+→ 없으면 기본값 "localhost" 사용 (로컬 개발)
+
+이 패턴 덕분에 코드 변경 없이:
+- 로컬: ./gradlew bootRun → localhost로 접속
+- Docker: docker compose up → 환경변수로 오버라이드
+```
+
+**depends_on + service_healthy가 왜 중요해?**
+```
+[depends_on만 사용]
+app-1 시작 → PostgreSQL 컨테이너 시작됨(하지만 DB 초기화 중)
+→ app-1이 DB 연결 시도 → 실패! (아직 준비 안 됨)
+
+[depends_on + condition: service_healthy]
+PostgreSQL 시작 → healthcheck: pg_isready → "준비 완료!"
+→ 그제서야 app-1 시작 → DB 연결 성공!
+```
+
+### 스케일아웃 시 Kafka Consumer Group 동작
+
+```
+[서버 1대일 때]
+chat.messages 토픽 (6개 파티션)
+Partition 0~5 → 서버1의 Consumer가 전부 처리
+
+[서버 2대일 때] (자동 리밸런싱!)
+Partition 0,1,2 → 서버1(app-1)의 Consumer
+Partition 3,4,5 → 서버2(app-2)의 Consumer
+
+같은 Consumer Group 내에서 Kafka가 자동으로 파티션을 분배!
+→ 코드 변경 없이 서버만 추가하면 자동 스케일아웃
+→ 이게 Kafka Consumer Group의 핵심 가치
+```
+
+### 통합 테스트: ConsumerRecoveryIntegrationTest
+
+```java
+class ConsumerRecoveryIntegrationTest extends BaseIntegrationTest {
+
+    @Test
+    @DisplayName("멱등성 심화: 동일 messageKey를 Kafka로 2회 발행 → DB에 1건만 저장")
+    void duplicateMessageKey_shouldSaveOnlyOnce() {
+        UUID messageKey = UUID.randomUUID();
+        ChatMessageEvent event = new ChatMessageEvent(
+                messageKey, room.getId(), user1.getId(), "유저1",
+                "중복 테스트 메시지", MessageType.TEXT, LocalDateTime.now());
+
+        // 동일 메시지를 2회 Kafka에 발행
+        kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, String.valueOf(room.getId()), event);
+        kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, String.valueOf(room.getId()), event);
+
+        // Consumer가 처리할 시간 대기 후 DB 확인 (Awaitility)
+        await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
+            long count = messageRepository.countByMessageKey(messageKey);
+            assertThat(count).isEqualTo(1);  // 2번 발행했지만 1건만 저장!
+        });
+    }
+
+    @Test
+    @DisplayName("Kafka → Consumer → DB 저장 E2E 검증")
+    void kafkaToDbEndToEnd() {
+        UUID messageKey = UUID.randomUUID();
+        ChatMessageEvent event = new ChatMessageEvent(...);
+
+        // Kafka에 직접 메시지 발행 (WebSocket 거치지 않고)
+        kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, String.valueOf(room.getId()), event);
+
+        // DB에 메시지가 저장될 때까지 대기
+        await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
+            assertThat(messageRepository.existsByMessageKey(messageKey)).isTrue();
+            Message saved = messageRepository.findByMessageKey(messageKey).get();
+            assertThat(saved.getContent()).isEqualTo("E2E 테스트");
+            assertThat(saved.getChatRoom().getId()).isEqualTo(room.getId());
+        });
+    }
+}
+```
+
+**Awaitility가 뭐야?**
+```
+Kafka Consumer는 비동기로 동작:
+→ kafkaTemplate.send() 후 Consumer가 언제 처리할지 모름
+→ 바로 assertThat 하면 아직 DB에 없어서 실패!
+
+[Thread.sleep 방식]
+Thread.sleep(5000);  // 5초 기다림
+assertThat(count).isEqualTo(1);
+문제: 5초가 충분한지 모름 (느린 환경에서 실패 가능)
+
+[Awaitility 방식]
+await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
+    assertThat(count).isEqualTo(1);
+});
+장점: 조건 충족 시 즉시 통과 (빠른 환경: 0.5초, 느린 환경: 5초)
+→ 최대 10초까지 대기, 그 전에 성공하면 바로 통과!
+```
+
+### 통합 테스트: PresenceIntegrationTest
+
+```java
+class PresenceIntegrationTest extends BaseIntegrationTest {
+
+    @Test
+    @DisplayName("온라인 상태 설정 → 확인 → 오프라인 → 확인")
+    void presenceOnlineOffline() {
+        // 처음에는 오프라인
+        assertThat(presenceService.isOnline(user1Id)).isFalse();
+
+        // 온라인 설정 (Redis에 키 생성)
+        presenceService.setOnline(user1Id);
+        assertThat(presenceService.isOnline(user1Id)).isTrue();
+
+        // 오프라인 설정 (Redis에서 키 삭제)
+        presenceService.setOffline(user1Id);
+        assertThat(presenceService.isOnline(user1Id)).isFalse();
+    }
+
+    @Test
+    @DisplayName("채팅방 멤버 중 온라인 유저 조회")
+    void getOnlineMembers() {
+        presenceService.setOnline(user1Id);
+
+        // user1만 온라인
+        Set<Long> onlineMembers = presenceService.getOnlineMembers(roomId);
+        assertThat(onlineMembers).containsExactly(user1Id);
+
+        // user2도 온라인
+        presenceService.setOnline(user2Id);
+        onlineMembers = presenceService.getOnlineMembers(roomId);
+        assertThat(onlineMembers).containsExactlyInAnyOrder(user1Id, user2Id);
+
+        // REST API로도 검증
+        ResponseEntity<Set<Long>> response = restTemplate.exchange(
+                baseUrl + "/api/rooms/" + roomId + "/members/online",
+                HttpMethod.GET,
+                new HttpEntity<>(authHeaders(token1)),
+                new ParameterizedTypeReference<>() {});
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).containsExactlyInAnyOrder(user1Id, user2Id);
+    }
+}
+```
+
+### 2차 추가 파일 전체 구조
+
+```
+src/main/java/com/realtime/chat/
+│
+├── config/
+│   ├── RateLimitInterceptor.java     ← [신규] 메시지 속도 제한 (STEP 10)
+│   └── WebSocketEventListener.java   ← [신규] WebSocket 연결/해제 감지 (STEP 12)
+│
+├── controller/
+│   └── PresenceController.java       ← [신규] 온라인 멤버 조회 API (STEP 12)
+│
+├── dto/
+│   └── PresenceEvent.java            ← [신규] 상태 변경 이벤트 DTO (STEP 12)
+│
+├── service/
+│   └── PresenceService.java          ← [신규] Redis 기반 상태 관리 (STEP 12)
+│
+├── [수정] config/KafkaConfig.java    ← DLT Recoverer 연결 (STEP 11)
+├── [수정] config/RedisConfig.java    ← Presence 채널 구독 추가 (STEP 12)
+├── [수정] config/SecurityConfig.java ← /actuator/health permitAll (STEP 9)
+├── [수정] config/WebSocketConfig.java ← RateLimitInterceptor 등록 (STEP 10)
+├── [수정] service/RedisPubSubService.java ← Presence 발행/수신 추가 (STEP 12)
+├── [수정] consumer/*Consumer.java    ← 에러 로깅 강화 (STEP 11)
+│
+├── [수정] application.yml            ← graceful shutdown, actuator, rate-limit, 환경변수 (STEP 9,10,13)
+├── [수정] docker-compose.yml         ← app-1, app-2 서비스 추가 (STEP 13)
+├── [신규] Dockerfile                 ← Multi-stage 빌드 (STEP 13)
+│
+src/test/java/com/realtime/chat/
+├── ConsumerRecoveryIntegrationTest.java ← [신규] 멱등성 + E2E 테스트 (STEP 13)
+└── PresenceIntegrationTest.java         ← [신규] 온라인 상태 테스트 (STEP 13)
+```
+
+---
+
+> 1차에서 **"메시지가 전달된다"**를 만들었고,
+> 2차에서 **"안전하고, 관찰 가능하고, 확장 가능하게"**를 만들었습니다.
 > 이 가이드를 읽고 코드를 다시 보면 "아, 이 코드가 이 역할을 하는 거구나"가 보일 겁니다.
 > 궁금한 부분이 있다면 해당 파일을 직접 읽어보면서 흐름을 따라가보세요!
