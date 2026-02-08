@@ -21,58 +21,54 @@ Kafka + WebSocket 기반 실시간 채팅 서비스
 
 ```mermaid
 flowchart TB
-    Client(["🖥️ Client<br/>WebSocket / STOMP"])
+    C(["Client · STOMP"])
 
-    subgraph APP["🟢 Spring Boot Cluster"]
+    subgraph app["Application"]
         direction LR
-        A1["App-1<br/>:8081"]
-        A2["App-2<br/>:8082"]
+        A1["App-1 · :8081"]
+        A2["App-2 · :8082"]
     end
 
-    subgraph KAFKA["🟠 Apache Kafka · KRaft"]
+    subgraph kafka["Kafka · KRaft"]
         direction LR
         T1["chat.messages<br/>6 partitions · key=roomId"]
         T2["chat.read-receipts<br/>3 partitions"]
     end
 
-    subgraph CG["⚙️ Consumer Groups"]
+    subgraph consumers["Consumer Groups"]
         direction LR
-        P["chat-persistence<br/>DB 저장 + 멱등성"]
-        B["chat-broadcast<br/>Redis Pub/Sub"]
-        R["chat-read-receipt<br/>읽음 처리"]
+        P["Persistence<br/>DB 저장 · 멱등성"]
+        B["Broadcast<br/>Redis Pub/Sub"]
+        R["Read Receipt<br/>읽음 처리"]
     end
 
-    DB[("🐘 PostgreSQL")]
-    RD[("Redis<br/>Pub/Sub + Cache")]
-    DLT["⚠️ DLT<br/>Dead Letter Topics"]
+    subgraph storage["Storage"]
+        direction LR
+        DB[("PostgreSQL")]
+        RD[("Redis<br/>Pub/Sub · Cache")]
+    end
 
-    Client -->|STOMP| A1
-    Client -->|STOMP| A2
-    A1 & A2 -->|produce| T1
-    A1 & A2 -->|produce| T2
+    DLT["DLT"]
+
+    C --> A1 & A2
+    A1 & A2 --> T1 & T2
     T1 --> P & B
     T2 --> R
-    P -->|저장| DB
-    B -->|publish| RD
-    R -->|저장| DB
-    P & R -.->|3회 실패| DLT
+    P & R --> DB
+    B --> RD
+    P & R -.-> DLT
     RD -.->|subscribe| A1 & A2
 
-    classDef client fill:#e8f4fd,stroke:#42a5f5,stroke-width:2px,color:#1565c0
-    classDef app fill:#e8f5e9,stroke:#66bb6a,stroke-width:2px,color:#2e7d32
-    classDef kafka fill:#fff8e1,stroke:#ffa726,stroke-width:2px,color:#e65100
-    classDef consumer fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#6a1b9a
-    classDef db fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#0d47a1
-    classDef redis fill:#fce4ec,stroke:#ef5350,stroke-width:2px,color:#b71c1c
-    classDef dlt fill:#fff3e0,stroke:#e65100,stroke-width:2px,stroke-dasharray:5 5,color:#bf360c
+    style app fill:#f0fdf4,stroke:#86efac,color:#166534
+    style kafka fill:#fffbeb,stroke:#fcd34d,color:#92400e
+    style consumers fill:#f5f3ff,stroke:#c4b5fd,color:#5b21b6
+    style storage fill:#eff6ff,stroke:#93c5fd,color:#1e40af
 
-    class Client client
-    class A1,A2 app
-    class T1,T2 kafka
-    class P,B,R consumer
-    class DB db
-    class RD redis
-    class DLT dlt
+    classDef clientNode fill:#f0f9ff,stroke:#38bdf8,stroke-width:2px,color:#0369a1
+    classDef dltNode fill:#fef2f2,stroke:#fca5a5,stroke-dasharray:5 5,color:#991b1b
+
+    class C clientNode
+    class DLT dltNode
 ```
 
 ## 메시지 흐름
