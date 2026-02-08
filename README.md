@@ -20,52 +20,59 @@ Kafka + WebSocket 기반 실시간 채팅 서비스
 ## 아키텍처
 
 ```mermaid
-graph TB
-    Client["Client\n(WebSocket/STOMP)"]
+flowchart TB
+    Client(["🖥️ Client<br/>WebSocket / STOMP"])
 
-    subgraph App["Spring Boot Cluster"]
-        App1["App Instance 1\n:8081"]
-        App2["App Instance 2\n:8082"]
+    subgraph APP["🟢 Spring Boot Cluster"]
+        direction LR
+        A1["App-1<br/>:8081"]
+        A2["App-2<br/>:8082"]
     end
 
-    subgraph Kafka["Apache Kafka (KRaft)"]
-        T1["chat.messages\n(6 partitions, key=roomId)"]
-        T2["chat.read-receipts\n(3 partitions)"]
-        DLT1["chat.messages.dlt"]
-        DLT2["chat.read-receipts.dlt"]
+    subgraph KAFKA["🟠 Apache Kafka · KRaft"]
+        direction LR
+        T1["chat.messages<br/>6 partitions · key=roomId"]
+        T2["chat.read-receipts<br/>3 partitions"]
     end
 
-    subgraph Consumers["Consumer Groups"]
-        CG1["chat-persistence\nDB 저장 + 멱등성"]
-        CG2["chat-broadcast\nRedis Pub/Sub 브로드캐스트"]
-        CG3["chat-read-receipt\n읽음 처리"]
+    subgraph CG["⚙️ Consumer Groups"]
+        direction LR
+        P["chat-persistence<br/>DB 저장 + 멱등성"]
+        B["chat-broadcast<br/>Redis Pub/Sub"]
+        R["chat-read-receipt<br/>읽음 처리"]
     end
 
-    Redis["Redis\n(Pub/Sub + Cache)"]
-    DB["PostgreSQL"]
+    DB[("🐘 PostgreSQL")]
+    RD[("Redis<br/>Pub/Sub + Cache")]
+    DLT["⚠️ DLT<br/>Dead Letter Topics"]
 
-    Client -->|STOMP| App1
-    Client -->|STOMP| App2
+    Client -->|STOMP| A1
+    Client -->|STOMP| A2
+    A1 & A2 -->|produce| T1
+    A1 & A2 -->|produce| T2
+    T1 --> P & B
+    T2 --> R
+    P -->|저장| DB
+    B -->|publish| RD
+    R -->|저장| DB
+    P & R -.->|3회 실패| DLT
+    RD -.->|subscribe| A1 & A2
 
-    App1 -->|produce| T1
-    App1 -->|produce| T2
-    App2 -->|produce| T1
-    App2 -->|produce| T2
+    classDef client fill:#e8f4fd,stroke:#42a5f5,stroke-width:2px,color:#1565c0
+    classDef app fill:#e8f5e9,stroke:#66bb6a,stroke-width:2px,color:#2e7d32
+    classDef kafka fill:#fff8e1,stroke:#ffa726,stroke-width:2px,color:#e65100
+    classDef consumer fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px,color:#6a1b9a
+    classDef db fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#0d47a1
+    classDef redis fill:#fce4ec,stroke:#ef5350,stroke-width:2px,color:#b71c1c
+    classDef dlt fill:#fff3e0,stroke:#e65100,stroke-width:2px,stroke-dasharray:5 5,color:#bf360c
 
-    T1 -->|consume| CG1
-    T1 -->|consume| CG2
-    T2 -->|consume| CG3
-
-    CG1 -->|저장| DB
-    CG1 -.->|재시도 실패| DLT1
-    CG2 -->|publish| Redis
-    CG3 -->|저장| DB
-    CG3 -.->|재시도 실패| DLT2
-
-    Redis -->|subscribe| App1
-    Redis -->|subscribe| App2
-    App1 -->|STOMP 전송| Client
-    App2 -->|STOMP 전송| Client
+    class Client client
+    class A1,A2 app
+    class T1,T2 kafka
+    class P,B,R consumer
+    class DB db
+    class RD redis
+    class DLT dlt
 ```
 
 ## 메시지 흐름
