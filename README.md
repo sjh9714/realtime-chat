@@ -19,57 +19,9 @@ Kafka + WebSocket 기반 실시간 채팅 서비스
 
 ## 아키텍처
 
-```mermaid
-flowchart TB
-    C(["Client · STOMP"])
-
-    subgraph app["Application"]
-        direction LR
-        A1["App-1 · :8081"]
-        A2["App-2 · :8082"]
-    end
-
-    subgraph kafka["Kafka · KRaft"]
-        direction LR
-        T1["chat.messages<br/>6 partitions · key=roomId"]
-        T2["chat.read-receipts<br/>3 partitions"]
-    end
-
-    subgraph consumers["Consumer Groups"]
-        direction LR
-        P["Persistence<br/>DB 저장 · 멱등성"]
-        B["Broadcast<br/>Redis Pub/Sub"]
-        R["Read Receipt<br/>읽음 처리"]
-    end
-
-    subgraph storage["Storage"]
-        direction LR
-        DB[("PostgreSQL")]
-        RD[("Redis<br/>Pub/Sub · Cache")]
-    end
-
-    DLT["DLT"]
-
-    C --> A1 & A2
-    A1 & A2 --> T1 & T2
-    T1 --> P & B
-    T2 --> R
-    P & R --> DB
-    B --> RD
-    P & R -.-> DLT
-    RD -.->|subscribe| A1 & A2
-
-    style app fill:#f0fdf4,stroke:#86efac,color:#166534
-    style kafka fill:#fffbeb,stroke:#fcd34d,color:#92400e
-    style consumers fill:#f5f3ff,stroke:#c4b5fd,color:#5b21b6
-    style storage fill:#eff6ff,stroke:#93c5fd,color:#1e40af
-
-    classDef clientNode fill:#f0f9ff,stroke:#38bdf8,stroke-width:2px,color:#0369a1
-    classDef dltNode fill:#fef2f2,stroke:#fca5a5,stroke-dasharray:5 5,color:#991b1b
-
-    class C clientNode
-    class DLT dltNode
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="Architecture" width="800"/>
+</p>
 
 ## 메시지 흐름
 

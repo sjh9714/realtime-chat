@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linejoin="round"/>
+    </marker>
+    <marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#ef4444" stroke-width="1.8" stroke-linejoin="round"/>
+    </marker>
+    <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M1,1.5 L9,5 L1,8.5" fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-linejoin="round"/>
+    </marker>
+    <filter id="s">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="640" fill="#fafbfc" rx="8"/>
+
+  <!-- ─── GROUP BOXES ─── -->
+
+  <!-- Application -->
+  <rect x="235" y="105" width="490" height="70" rx="12" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="250" y="119" font-size="9.5" fill="#15803d" font-weight="700" letter-spacing="1">APPLICATION</text>
+
+  <!-- Kafka -->
+  <rect x="195" y="225" width="570" height="76" rx="12" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="210" y="239" font-size="9.5" fill="#a16207" font-weight="700" letter-spacing="1">KAFKA · KRAFT</text>
+
+  <!-- Consumers -->
+  <rect x="115" y="345" width="690" height="72" rx="12" fill="#f5f3ff" stroke="#ddd6fe"/>
+  <text x="130" y="359" font-size="9.5" fill="#6d28d9" font-weight="700" letter-spacing="1">CONSUMER GROUPS</text>
+
+  <!-- Storage -->
+  <rect x="235" y="478" width="490" height="82" rx="12" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="250" y="492" font-size="9.5" fill="#1d4ed8" font-weight="700" letter-spacing="1">STORAGE</text>
+
+  <!-- ─── NODES ─── -->
+
+  <!-- Client -->
+  <rect x="370" y="24" width="220" height="42" rx="21" fill="#e0f2fe" stroke="#7dd3fc" stroke-width="1.5" filter="url(#s)"/>
+  <text x="480" y="50" text-anchor="middle" font-size="13" fill="#0c4a6e" font-weight="600">Client · STOMP</text>
+
+  <!-- App-1 -->
+  <rect x="260" y="122" width="140" height="36" rx="6" fill="#fff" stroke="#86efac" stroke-width="1.5" filter="url(#s)"/>
+  <text x="330" y="145" text-anchor="middle" font-size="12" fill="#166534" font-weight="500">App-1 :8081</text>
+
+  <!-- App-2 -->
+  <rect x="560" y="122" width="140" height="36" rx="6" fill="#fff" stroke="#86efac" stroke-width="1.5" filter="url(#s)"/>
+  <text x="630" y="145" text-anchor="middle" font-size="12" fill="#166534" font-weight="500">App-2 :8082</text>
+
+  <!-- chat.messages -->
+  <rect x="215" y="248" width="210" height="42" rx="6" fill="#fff" stroke="#fcd34d" stroke-width="1.5" filter="url(#s)"/>
+  <text x="320" y="267" text-anchor="middle" font-size="12" fill="#92400e" font-weight="500">chat.messages</text>
+  <text x="320" y="281" text-anchor="middle" font-size="9.5" fill="#b45309">6 partitions · key=roomId</text>
+
+  <!-- chat.read-receipts -->
+  <rect x="535" y="248" width="210" height="42" rx="6" fill="#fff" stroke="#fcd34d" stroke-width="1.5" filter="url(#s)"/>
+  <text x="640" y="267" text-anchor="middle" font-size="12" fill="#92400e" font-weight="500">chat.read-receipts</text>
+  <text x="640" y="281" text-anchor="middle" font-size="9.5" fill="#b45309">3 partitions</text>
+
+  <!-- Persistence -->
+  <rect x="135" y="365" width="155" height="38" rx="6" fill="#fff" stroke="#c4b5fd" stroke-width="1.5" filter="url(#s)"/>
+  <text x="212" y="381" text-anchor="middle" font-size="11" fill="#5b21b6" font-weight="600">Persistence</text>
+  <text x="212" y="394" text-anchor="middle" font-size="9" fill="#7c3aed">DB 저장 · 멱등성</text>
+
+  <!-- Broadcast -->
+  <rect x="395" y="365" width="155" height="38" rx="6" fill="#fff" stroke="#c4b5fd" stroke-width="1.5" filter="url(#s)"/>
+  <text x="472" y="381" text-anchor="middle" font-size="11" fill="#5b21b6" font-weight="600">Broadcast</text>
+  <text x="472" y="394" text-anchor="middle" font-size="9" fill="#7c3aed">Redis Pub/Sub</text>
+
+  <!-- Read Receipt -->
+  <rect x="630" y="365" width="155" height="38" rx="6" fill="#fff" stroke="#c4b5fd" stroke-width="1.5" filter="url(#s)"/>
+  <text x="707" y="381" text-anchor="middle" font-size="11" fill="#5b21b6" font-weight="600">Read Receipt</text>
+  <text x="707" y="394" text-anchor="middle" font-size="9" fill="#7c3aed">읽음 처리</text>
+
+  <!-- PostgreSQL cylinder -->
+  <g filter="url(#s)">
+    <path d="M290,518 A55,9 0 0,1 400,518 L400,548 A55,9 0 0,1 290,548 Z" fill="#fff" stroke="#93c5fd" stroke-width="1.5"/>
+    <path d="M290,518 A55,9 0 0,0 400,518" fill="#f0f7ff" stroke="#93c5fd" stroke-width="1.5"/>
+    <text x="345" y="540" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="500">PostgreSQL</text>
+  </g>
+
+  <!-- Redis cylinder -->
+  <g filter="url(#s)">
+    <path d="M570,518 A55,9 0 0,1 680,518 L680,548 A55,9 0 0,1 570,548 Z" fill="#fff" stroke="#fca5a5" stroke-width="1.5"/>
+    <path d="M570,518 A55,9 0 0,0 680,518" fill="#fff5f5" stroke="#fca5a5" stroke-width="1.5"/>
+    <text x="625" y="533" text-anchor="middle" font-size="12" fill="#b91c1c" font-weight="500">Redis</text>
+    <text x="625" y="546" text-anchor="middle" font-size="9" fill="#dc2626">Pub/Sub · Cache</text>
+  </g>
+
+  <!-- DLT -->
+  <rect x="830" y="368" width="80" height="32" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" stroke-dasharray="4 3" filter="url(#s)"/>
+  <text x="870" y="389" text-anchor="middle" font-size="11" fill="#991b1b" font-weight="600">DLT</text>
+
+  <!-- ─── ARROWS ─── -->
+
+  <!-- Client → App-1 -->
+  <line x1="435" y1="66" x2="360" y2="120" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+  <!-- Client → App-2 -->
+  <line x1="525" y1="66" x2="600" y2="120" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+
+  <!-- App group → messages -->
+  <line x1="350" y1="177" x2="330" y2="246" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+  <!-- App group → receipts -->
+  <line x1="610" y1="177" x2="630" y2="246" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+  <!-- produce label -->
+  <text x="480" y="208" text-anchor="middle" font-size="10" fill="#94a3b8" font-weight="500">produce</text>
+
+  <!-- messages → Persistence -->
+  <line x1="280" y1="290" x2="230" y2="363" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+  <!-- messages → Broadcast -->
+  <line x1="365" y1="290" x2="445" y2="363" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+  <!-- receipts → Read Receipt -->
+  <line x1="640" y1="290" x2="690" y2="363" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+
+  <!-- Persistence → PostgreSQL -->
+  <line x1="230" y1="403" x2="310" y2="512" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+  <!-- Broadcast → Redis -->
+  <line x1="490" y1="403" x2="595" y2="512" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+  <!-- Read Receipt → PostgreSQL (curved to avoid crossing) -->
+  <path d="M690,403 C690,468 380,468 370,512" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+
+  <!-- Consumer group → DLT -->
+  <line x1="805" y1="384" x2="828" y2="384" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ah-red)"/>
+  <text x="818" y="374" text-anchor="middle" font-size="8" fill="#ef4444" font-weight="500">실패</text>
+
+  <!-- Redis → App group (subscribe cycle) -->
+  <path d="M682,530 C845,530 845,140 702,140" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#ah-blue)"/>
+  <text x="858" y="340" font-size="9.5" fill="#3b82f6" font-weight="500" writing-mode="tb">subscribe</text>
+
+  <!-- ─── LEGEND ─── -->
+  <g transform="translate(28, 590)">
+    <line x1="0" y1="0" x2="24" y2="0" stroke="#64748b" stroke-width="1.5"/>
+    <text x="30" y="4" font-size="9" fill="#64748b">데이터 흐름</text>
+    <line x1="110" y1="0" x2="134" y2="0" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="6 3"/>
+    <text x="140" y="4" font-size="9" fill="#3b82f6">Pub/Sub 구독</text>
+    <line x1="230" y1="0" x2="254" y2="0" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="260" y="4" font-size="9" fill="#ef4444">3회 재시도 실패</text>
+  </g>
+</svg>
