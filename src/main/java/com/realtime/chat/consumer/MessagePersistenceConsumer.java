@@ -10,14 +10,20 @@ import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.ChatRoomRepository;
 import com.realtime.chat.repository.MessageRepository;
 import com.realtime.chat.repository.UserRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.CacheManager;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.http.HttpStatus;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
 
 // Consumer Group 1: 메시지를 DB에 저장 + 멱등성 체크 + unreadCount 증가
 @Slf4j
@@ -29,6 +35,10 @@ public class MessagePersistenceConsumer {
     private final ChatRoomRepository chatRoomRepository;
     private final UserRepository userRepository;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
+    private final Counter messagesPersistedCounter;
+    private final Counter messagesFailedCounter;
+    private final Timer messagesLatencyTimer;
+    private final CacheManager cacheManager;
 
     @KafkaListener(
             topics = KafkaConfig.MESSAGES_TOPIC,
@@ -62,13 +72,24 @@ public class MessagePersistenceConsumer {
             message.updateKafkaMetadata(record.partition(), record.offset());
             messageRepository.save(message);
 
-            // 발신자를 제외한 멤버들의 unreadCount 증가
+            // 발신자를 제외한 멤버들의 unreadCount 증가 + 캐시 무효화
             chatRoomMemberRepository.incrementUnreadCountForOtherMembers(event.getRoomId(), event.getSenderId());
+            var roomsCache = cacheManager.getCache("rooms");
+            if (roomsCache != null) {
+                roomsCache.clear();
+            }
+
+            // 메트릭: 저장 성공 + 지연시간
+            messagesPersistedCounter.increment();
+            Duration latency = Duration.between(event.getTimestamp(), LocalDateTime.now());
+            messagesLatencyTimer.record(latency);
 
             ack.acknowledge();
-            log.debug("메시지 저장 완료: messageKey={}, id={}", event.getMessageKey(), message.getId());
+            log.debug("메시지 저장 완료: messageKey={}, id={}, latency={}ms",
+                    event.getMessageKey(), message.getId(), latency.toMillis());
 
         } catch (Exception e) {
+            messagesFailedCounter.increment();
             log.error("메시지 저장 실패: messageKey={}, topic={}, partition={}, offset={}",
                     event.getMessageKey(), record.topic(), record.partition(), record.offset(), e);
             throw e; // ErrorHandler가 재시도 후 DLT로 보냄

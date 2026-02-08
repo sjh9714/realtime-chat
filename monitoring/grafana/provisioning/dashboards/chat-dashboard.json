@@ -1,0 +1,172 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "메시지 전송률 (msg/sec)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(chat_messages_sent_total[1m])",
+          "legendFormat": "전송 ({{instance}})",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(chat_messages_persisted_total[1m])",
+          "legendFormat": "저장 ({{instance}})",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(chat_messages_failed_total[1m])",
+          "legendFormat": "실패 ({{instance}})",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "WebSocket 활성 세션",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(chat_websocket_sessions)",
+          "legendFormat": "전체 세션",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "인스턴스별 WebSocket 세션",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "expr": "chat_websocket_sessions",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "title": "메시지 지연시간 (Kafka → DB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "chat_messages_latency_seconds{quantile=\"0.5\"}",
+          "legendFormat": "p50 ({{instance}})",
+          "refId": "A"
+        },
+        {
+          "expr": "chat_messages_latency_seconds{quantile=\"0.95\"}",
+          "legendFormat": "p95 ({{instance}})",
+          "refId": "B"
+        },
+        {
+          "expr": "chat_messages_latency_seconds{quantile=\"0.99\"}",
+          "legendFormat": "p99 ({{instance}})",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "Kafka Consumer Lag",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "kafka_consumer_fetch_manager_records_lag_max",
+          "legendFormat": "{{topic}} ({{instance}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "JVM 힙 메모리 사용량",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\"}",
+          "legendFormat": "{{id}} ({{instance}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "title": "HTTP 요청 처리량",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count[1m])",
+          "legendFormat": "{{method}} {{uri}} ({{instance}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["chat", "realtime"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "title": "Realtime Chat Service",
+  "uid": "chat-service-dashboard"
+}

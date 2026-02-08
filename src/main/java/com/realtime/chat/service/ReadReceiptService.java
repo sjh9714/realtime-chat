@@ -8,6 +8,7 @@ import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.MessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class ReadReceiptService {
     private final MessageRepository messageRepository;
     private final ChatMessageProducer chatMessageProducer;
     private final StringRedisTemplate redisTemplate;
+    private final CacheManager cacheManager;
 
     // 읽음 처리 요청 → Kafka로 발행
     public void markAsRead(Long userId, Long roomId, Long lastReadMessageId) {
@@ -53,6 +55,12 @@ public class ReadReceiptService {
             // Redis 캐시 업데이트
             String key = String.format(UNREAD_COUNT_KEY, event.getRoomId(), event.getUserId());
             redisTemplate.opsForValue().set(key, String.valueOf(unreadCount));
+
+            // 채팅방 목록 캐시 무효화 (unreadCount 변경)
+            var roomsCache = cacheManager.getCache("rooms");
+            if (roomsCache != null) {
+                roomsCache.evict(event.getUserId());
+            }
 
             log.debug("읽음 처리 완료: roomId={}, userId={}, unreadCount={}", event.getRoomId(), event.getUserId(), unreadCount);
         }

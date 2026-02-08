@@ -17,7 +17,7 @@ Kafka + WebSocket 기반 실시간 채팅 서비스 (백엔드 포트폴리오)
 ## 설계 문서
 
 - 설계 문서: `docs/DESIGN.md`
-- 성능 측정 결과: `docs/PERF_RESULT.md` (예정)
+- 성능 측정 결과: `docs/PERF_RESULT.md`
 
 ## 패키지 구조
 

@@ -3,6 +3,7 @@ package com.realtime.chat;
 import com.realtime.chat.dto.*;
 import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.ChatRoomRepository;
+import com.realtime.chat.repository.MessageRepository;
 import com.realtime.chat.repository.UserRepository;
 import com.realtime.chat.service.PresenceService;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,9 @@ class PresenceIntegrationTest extends BaseIntegrationTest {
     private ChatRoomMemberRepository chatRoomMemberRepository;
 
     @Autowired
+    private MessageRepository messageRepository;
+
+    @Autowired
     private PresenceService presenceService;
 
     private String baseUrl;
@@ -48,6 +52,7 @@ class PresenceIntegrationTest extends BaseIntegrationTest {
     @BeforeEach
     void setUp() {
         baseUrl = "http://localhost:" + port;
+        messageRepository.deleteAll();
         chatRoomMemberRepository.deleteAll();
         chatRoomRepository.deleteAll();
         userRepository.deleteAll();

@@ -50,8 +50,8 @@ Client (WebSocket/STOMP)
 | 저장소 | PostgreSQL 16 | 메시지 영구 저장 |
 | 인프라 | Docker Compose | `docker compose up` 한 줄로 전체 환경 실행 |
 | 테스트 | Testcontainers | PostgreSQL, Kafka, Redis 자동 구동 통합 테스트 |
-| 부하 테스트 | k6 | WebSocket 프로토콜 부하 테스트 (예정) |
-| 모니터링 | Prometheus, Grafana, Kafka UI | Consumer Lag, 레이턴시 p50/p95/p99 (예정) |
+| 부하 테스트 | k6 | REST API Before/After + WebSocket 부하 테스트 |
+| 모니터링 | Prometheus, Grafana | Micrometer 커스텀 메트릭, Grafana 대시보드 |
 
 ## 구현 완료
 
@@ -73,6 +73,14 @@ Client (WebSocket/STOMP)
 - [x] 온라인/오프라인 상태 표시 (Redis presence + WebSocket 이벤트 + Pub/Sub)
 - [x] WebSocket 스케일아웃 (Dockerfile + docker-compose 멀티 인스턴스)
 - [x] 통합 테스트 확장 (20개 테스트, Testcontainers)
+
+### 3차: 모니터링 + 성능 최적화
+- [x] Prometheus + Grafana 모니터링 (Micrometer 커스텀 메트릭 5개, 대시보드)
+- [x] N+1 쿼리 해결 (JPQL Constructor Expression으로 2N+1회 → 1회 쿼리)
+- [x] Redis Cache Aside (채팅방 목록 캐싱, TTL 5분, 3가지 무효화 전략)
+- [x] DB 인덱스 최적화 (EXPLAIN ANALYZE 기반 5개 인덱스 설계)
+- [x] k6 부하 테스트 (REST API Before/After + WebSocket 스케일아웃)
+- [x] 성능 측정 결과 문서화 (RPS +70%, p50 -69%)
 
 ## 핵심 기술 챌린지
 
@@ -104,7 +112,7 @@ Client (WebSocket/STOMP)
 ## 문서
 
 - [설계 문서](docs/DESIGN.md) — 아키텍처, ERD, Kafka 토픽, 기술 챌린지 상세
-- 성능 측정 결과 (PERF_RESULT.md) — 예정
+- [성능 최적화 기록](docs/PERF_RESULT.md) — N+1 해결, 인덱스, 캐시, k6 Before/After
 
 ## 실행 방법
 

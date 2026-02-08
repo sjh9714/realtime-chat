@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.realtime.chat.dto.ChatRoomListResponse;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -29,15 +31,16 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
             @Param("userId1") Long userId1,
             @Param("userId2") Long userId2);
 
-    // 내 채팅방 목록 조회
+    // 내 채팅방 목록 조회 (N+1 해결: JPQL 프로젝션으로 단일 쿼리)
     @Query("""
-            SELECT DISTINCT cr FROM ChatRoom cr
-            JOIN FETCH cr.members m
-            JOIN FETCH m.user
-            WHERE cr.id IN (
-                SELECT cm.chatRoom.id FROM ChatRoomMember cm
-                WHERE cm.user.id = :userId
+            SELECT new com.realtime.chat.dto.ChatRoomListResponse(
+                cr.id, cr.name, cr.type,
+                (SELECT COUNT(m2) FROM ChatRoomMember m2 WHERE m2.chatRoom.id = cr.id),
+                m.unreadCount, cr.createdAt
             )
+            FROM ChatRoomMember m
+            JOIN m.chatRoom cr
+            WHERE m.user.id = :userId
             """)
-    List<ChatRoom> findAllByUserId(@Param("userId") Long userId);
+    List<ChatRoomListResponse> findAllWithMemberInfoByUserId(@Param("userId") Long userId);
 }

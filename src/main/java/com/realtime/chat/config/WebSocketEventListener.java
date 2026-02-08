@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 // WebSocket 연결/해제 이벤트 감지 → 온라인 상태 관리
 @Slf4j
 @Component
@@ -20,6 +22,7 @@ public class WebSocketEventListener {
 
     private final PresenceService presenceService;
     private final RedisPubSubService redisPubSubService;
+    private final AtomicInteger websocketSessionGauge;
 
     @EventListener
     public void handleWebSocketConnect(SessionConnectEvent event) {
@@ -27,6 +30,7 @@ public class WebSocketEventListener {
         if (userId != null) {
             presenceService.setOnline(userId);
             redisPubSubService.publishPresence(PresenceEvent.online(userId));
+            websocketSessionGauge.incrementAndGet();
             log.info("WebSocket 연결: userId={}, sessionId={}", userId,
                     StompHeaderAccessor.wrap(event.getMessage()).getSessionId());
         }
@@ -38,6 +42,7 @@ public class WebSocketEventListener {
         if (userId != null) {
             presenceService.setOffline(userId);
             redisPubSubService.publishPresence(PresenceEvent.offline(userId));
+            websocketSessionGauge.decrementAndGet();
             log.info("WebSocket 해제: userId={}, sessionId={}", userId, event.getSessionId());
         }
     }

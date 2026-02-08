@@ -7,6 +7,7 @@ import com.realtime.chat.event.ChatMessageEvent;
 import com.realtime.chat.producer.ChatMessageProducer;
 import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.UserRepository;
+import io.micrometer.core.instrument.Counter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,7 @@ public class ChatMessageController {
     private final ChatMessageProducer chatMessageProducer;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final UserRepository userRepository;
+    private final Counter messagesSentCounter;
 
     // 클라이언트가 /app/chat.send로 메시지를 보내면 Kafka로 발행
     @MessageMapping("/chat.send")
@@ -49,5 +51,6 @@ public class ChatMessageController {
         );
 
         chatMessageProducer.sendMessage(event);
+        messagesSentCounter.increment();
     }
 }

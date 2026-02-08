@@ -51,3 +51,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_messages_kafka ON messages(kafka_partition,
 
 -- 채팅방 멤버 조회용 인덱스
 CREATE INDEX IF NOT EXISTS idx_chat_room_members_user_id ON chat_room_members(user_id);
+
+-- 메시지 발신자 조회용 인덱스 (관리/검색 기능용)
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
+
+-- 인덱스 커버리지 분석:
+-- UNIQUE(room_id, user_id) → findByChatRoomIdAndUserId, existsByChatRoomIdAndUserId, incrementUnreadCountForOtherMembers, COUNT 서브쿼리
+-- idx_chat_room_members_user_id → findAllWithMemberInfoByUserId (내 채팅방 목록)
+-- idx_messages_room_id_id → 커서 페이지네이션, countUnreadMessages
+-- message_key UNIQUE → existsByMessageKey (멱등성 체크)

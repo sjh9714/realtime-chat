@@ -12,6 +12,8 @@ import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.ChatRoomRepository;
 import com.realtime.chat.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ public class ChatRoomService {
     private final UserRepository userRepository;
 
     // 1:1 채팅방 생성 (이미 존재하면 기존 방 반환)
+    @CacheEvict(value = "rooms", allEntries = true)
     @Transactional
     public ChatRoomResponse createDirectRoom(Long userId, CreateDirectRoomRequest request) {
         if (userId.equals(request.getTargetUserId())) {
@@ -49,6 +52,7 @@ public class ChatRoomService {
     }
 
     // 그룹 채팅방 생성
+    @CacheEvict(value = "rooms", allEntries = true)
     @Transactional
     public ChatRoomResponse createGroupRoom(Long userId, CreateGroupRoomRequest request) {
         User currentUser = findUser(userId);
@@ -71,6 +75,7 @@ public class ChatRoomService {
     }
 
     // 그룹 채팅방 참여
+    @CacheEvict(value = "rooms", allEntries = true)
     @Transactional
     public ChatRoomResponse joinRoom(Long userId, Long roomId) {
         User user = findUser(userId);
@@ -88,12 +93,11 @@ public class ChatRoomService {
         return ChatRoomResponse.from(room);
     }
 
-    // 내 채팅방 목록 조회
+    // 내 채팅방 목록 조회 (JPQL 프로젝션 + Redis 캐싱)
+    @Cacheable(value = "rooms", key = "#userId")
     @Transactional(readOnly = true)
     public List<ChatRoomListResponse> getMyRooms(Long userId) {
-        return chatRoomRepository.findAllByUserId(userId).stream()
-                .map(room -> ChatRoomListResponse.from(room, userId))
-                .toList();
+        return chatRoomRepository.findAllWithMemberInfoByUserId(userId);
     }
 
     // 채팅방 상세 조회
