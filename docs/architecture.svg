@@ -74,20 +74,14 @@
   <text x="707" y="381" text-anchor="middle" font-size="11" fill="#5b21b6" font-weight="600">Read Receipt</text>
   <text x="707" y="394" text-anchor="middle" font-size="9" fill="#7c3aed">읽음 처리</text>
 
-  <!-- PostgreSQL cylinder -->
-  <g filter="url(#s)">
-    <path d="M290,518 A55,9 0 0,1 400,518 L400,548 A55,9 0 0,1 290,548 Z" fill="#fff" stroke="#93c5fd" stroke-width="1.5"/>
-    <path d="M290,518 A55,9 0 0,0 400,518" fill="#f0f7ff" stroke="#93c5fd" stroke-width="1.5"/>
-    <text x="345" y="540" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="500">PostgreSQL</text>
-  </g>
+  <!-- PostgreSQL -->
+  <rect x="290" y="505" width="110" height="44" rx="6" fill="#fff" stroke="#93c5fd" stroke-width="1.5" filter="url(#s)"/>
+  <text x="345" y="532" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="500">PostgreSQL</text>
 
-  <!-- Redis cylinder -->
-  <g filter="url(#s)">
-    <path d="M570,518 A55,9 0 0,1 680,518 L680,548 A55,9 0 0,1 570,548 Z" fill="#fff" stroke="#fca5a5" stroke-width="1.5"/>
-    <path d="M570,518 A55,9 0 0,0 680,518" fill="#fff5f5" stroke="#fca5a5" stroke-width="1.5"/>
-    <text x="625" y="533" text-anchor="middle" font-size="12" fill="#b91c1c" font-weight="500">Redis</text>
-    <text x="625" y="546" text-anchor="middle" font-size="9" fill="#dc2626">Pub/Sub · Cache</text>
-  </g>
+  <!-- Redis -->
+  <rect x="570" y="505" width="110" height="44" rx="6" fill="#fff" stroke="#fca5a5" stroke-width="1.5" filter="url(#s)"/>
+  <text x="625" y="525" text-anchor="middle" font-size="12" fill="#b91c1c" font-weight="500">Redis</text>
+  <text x="625" y="539" text-anchor="middle" font-size="9" fill="#dc2626">Pub/Sub · Cache</text>
 
   <!-- DLT -->
   <rect x="830" y="368" width="80" height="32" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" stroke-dasharray="4 3" filter="url(#s)"/>
@@ -127,7 +121,7 @@
 
   <!-- Redis → App group (subscribe cycle) -->
   <path d="M682,530 C845,530 845,140 702,140" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#ah-blue)"/>
-  <text x="858" y="340" font-size="9.5" fill="#3b82f6" font-weight="500" writing-mode="tb">subscribe</text>
+  <text x="862" y="340" font-size="9.5" fill="#3b82f6" font-weight="500">subscribe</text>
 
   <!-- ─── LEGEND ─── -->
   <g transform="translate(28, 590)">
