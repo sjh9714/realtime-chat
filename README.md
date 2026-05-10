@@ -1,6 +1,6 @@
 # Realtime Chat
 
-Kafka와 Redis Pub/Sub 기반의 다중 인스턴스 실시간 채팅 시스템에서 메시지 순서, 전달 ACK/NACK, 구독 권한, 읽음 정합성, DLT 복구를 검증한 Spring Boot 백엔드 프로젝트입니다.
+Kafka와 Redis Pub/Sub 기반의 다중 인스턴스 실시간 채팅 시스템에서 메시지 순서, Kafka publish ACK/NACK, 구독 권한, 읽음 정합성, DLT 격리와 수동 replay utility를 검증한 Spring Boot 백엔드 프로젝트입니다.
 
 ## 핵심 문제
 
@@ -67,6 +67,8 @@ WebSocket endpoint는 `/ws`입니다.
 | Kafka publish NACK 구독 | `/user/queue/messages/error` |
 
 ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻입니다. PostgreSQL 저장 완료나 상대 클라이언트 수신 완료를 의미하지 않습니다. 저장과 브로드캐스트는 Kafka consumer가 비동기로 처리합니다.
+
+`clientMessageId`는 ACK/NACK correlation 용도입니다. 현재 DB 저장 멱등성은 Kafka event의 `messageKey` 기준이며, 클라이언트 재시도까지 DB-level idempotency로 막으려면 `(senderId, clientMessageId)` unique constraint가 별도로 필요합니다.
 
 ## 성능 결과
 
@@ -149,6 +151,7 @@ docker compose up -d postgres redis kafka kafka-ui
 ## 한계
 
 - ACK/NACK는 Kafka publish 단계의 결과이며 DB 저장 완료, WebSocket 수신 완료, 상대방 단말 표시 완료를 보장하지 않습니다.
+- `clientMessageId`는 ACK/NACK correlation 용도이며, 현재 DB-level idempotency는 `messageKey` 기준입니다.
 - Kafka 순서 보장은 같은 `roomId`가 같은 partition에 들어가는 범위에 한정됩니다. 서로 다른 room 간 전역 순서는 보장하지 않습니다.
 - DLT replay는 외부 운영 API가 아니라 내부 manual utility입니다. 운영 환경에서는 접근 제어, 감사 로그, replay 대상 필터링이 추가로 필요합니다.
 - Presence heartbeat는 클라이언트가 TTL보다 짧은 주기로 `/app/presence.heartbeat`를 보내야 유지됩니다.
