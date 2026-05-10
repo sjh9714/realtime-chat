@@ -29,6 +29,7 @@ public class RedisPubSubService {
       log.debug("Redis 발행: channel={}, messageKey={}", channel, event.getMessageKey());
     } catch (Exception e) {
       log.error("Redis 발행 실패: messageKey={}", event.getMessageKey(), e);
+      throw new IllegalStateException("Redis publish failed", e);
     }
   }
 
