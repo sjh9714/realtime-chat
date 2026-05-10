@@ -72,11 +72,12 @@ public class MessagePersistenceConsumer {
             message.updateKafkaMetadata(record.partition(), record.offset());
             messageRepository.save(message);
 
-            // 발신자를 제외한 멤버들의 unreadCount 증가 + 캐시 무효화
+            // 발신자를 제외한 멤버들의 unreadCount 증가 + 해당 방 멤버 캐시만 무효화
             chatRoomMemberRepository.incrementUnreadCountForOtherMembers(event.getRoomId(), event.getSenderId());
             var roomsCache = cacheManager.getCache("rooms");
             if (roomsCache != null) {
-                roomsCache.clear();
+                chatRoomMemberRepository.findUserIdsByRoomId(event.getRoomId())
+                        .forEach(roomsCache::evict);
             }
 
             // 메트릭: 저장 성공 + 지연시간

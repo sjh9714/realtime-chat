@@ -6,7 +6,10 @@ import com.realtime.chat.event.ReadReceiptEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -16,19 +19,20 @@ public class ChatMessageProducer {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     // partition key = roomId로 같은 방 메시지의 순서 보장
-    public void sendMessage(ChatMessageEvent event) {
+    public CompletableFuture<SendResult<String, Object>> sendMessage(ChatMessageEvent event) {
         String key = String.valueOf(event.getRoomId());
-        kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, key, event)
-                .whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        log.error("메시지 발행 실패: roomId={}, messageKey={}", event.getRoomId(), event.getMessageKey(), ex);
-                    } else {
-                        log.debug("메시지 발행 성공: roomId={}, messageKey={}, partition={}, offset={}",
-                                event.getRoomId(), event.getMessageKey(),
-                                result.getRecordMetadata().partition(),
-                                result.getRecordMetadata().offset());
-                    }
-                });
+        CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, key, event);
+        future.whenComplete((result, ex) -> {
+            if (ex != null) {
+                log.error("메시지 발행 실패: roomId={}, messageKey={}", event.getRoomId(), event.getMessageKey(), ex);
+            } else {
+                log.debug("메시지 발행 성공: roomId={}, messageKey={}, partition={}, offset={}",
+                        event.getRoomId(), event.getMessageKey(),
+                        result.getRecordMetadata().partition(),
+                        result.getRecordMetadata().offset());
+            }
+        });
+        return future;
     }
 
     public void sendReadReceipt(ReadReceiptEvent event) {

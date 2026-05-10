@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,12 +45,24 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             @Param("roomId") Long roomId,
             @Param("limit") int limit);
 
+    @Query("""
+            SELECT m FROM Message m
+            WHERE m.chatRoom.id = :roomId
+            ORDER BY m.kafkaPartition ASC, m.kafkaOffset ASC
+            """)
+    List<Message> findByRoomIdOrderByKafkaOffset(@Param("roomId") Long roomId);
+
     // 읽음 처리용: 특정 메시지 이후 안읽은 메시지 수 계산
     @Query("""
             SELECT COUNT(m) FROM Message m
-            WHERE m.chatRoom.id = :roomId AND m.id > :lastReadMessageId
+            WHERE m.chatRoom.id = :roomId
+            AND m.sender.id <> :userId
+            AND m.id > :lastReadMessageId
+            AND m.createdAt >= :joinedAt
             """)
     int countUnreadMessages(
             @Param("roomId") Long roomId,
-            @Param("lastReadMessageId") Long lastReadMessageId);
+            @Param("userId") Long userId,
+            @Param("lastReadMessageId") Long lastReadMessageId,
+            @Param("joinedAt") LocalDateTime joinedAt);
 }

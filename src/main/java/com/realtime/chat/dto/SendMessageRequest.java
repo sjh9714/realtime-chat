@@ -6,9 +6,13 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.UUID;
+
 @Getter
 @NoArgsConstructor
 public class SendMessageRequest {
+
+    private UUID clientMessageId;
 
     @NotNull(message = "채팅방 ID는 필수입니다.")
     private Long roomId;
