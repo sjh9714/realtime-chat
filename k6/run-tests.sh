@@ -17,7 +17,7 @@ echo "=========================================="
 
 # 1. 단일 인스턴스 REST API 테스트
 echo ""
-echo "[1/4] REST API 테스트 (단일 인스턴스 - app-1:8081)"
+echo "[1/5] REST API 테스트 (단일 인스턴스 - app-1:8081)"
 echo "------------------------------------------"
 k6 run \
     --env BASE_URL=http://localhost:8081 \
@@ -27,7 +27,7 @@ k6 run \
 
 # 2. 단일 인스턴스 WebSocket 테스트
 echo ""
-echo "[2/4] WebSocket 테스트 (단일 인스턴스 - app-1:8081)"
+echo "[2/5] WebSocket 테스트 (단일 인스턴스 - app-1:8081)"
 echo "------------------------------------------"
 k6 run \
     --env BASE_URL=http://localhost:8081 \
@@ -38,7 +38,7 @@ k6 run \
 
 # 3. 2대 스케일아웃 REST API 테스트 (라운드로빈)
 echo ""
-echo "[3/4] REST API 테스트 (2대 스케일아웃 - app-1:8081)"
+echo "[3/5] REST API 테스트 (2대 스케일아웃 - app-1:8081)"
 echo "     두 번째 인스턴스는 app-2:8082에서 동시 실행"
 echo "------------------------------------------"
 k6 run \
@@ -59,7 +59,7 @@ wait $PID1 $PID2
 
 # 4. 2대 스케일아웃 WebSocket 테스트
 echo ""
-echo "[4/4] WebSocket 테스트 (2대 스케일아웃)"
+echo "[4/5] WebSocket 테스트 (2대 스케일아웃)"
 echo "------------------------------------------"
 k6 run \
     --env BASE_URL=http://localhost:8081 \
@@ -78,6 +78,17 @@ k6 run \
 PID4=$!
 
 wait $PID3 $PID4
+
+# 5. Mixed chat scenario (REST 조회 + WebSocket 전송/수신 + 읽음 처리)
+echo ""
+echo "[5/5] Mixed Chat 테스트 (단일 인스턴스 - app-1:8081)"
+echo "------------------------------------------"
+k6 run \
+    --env BASE_URL=http://localhost:8081 \
+    --env WS_URL=ws://localhost:8081/ws \
+    --out json="${RESULTS_DIR}/mixed-single-${TIMESTAMP}.json" \
+    --summary-export="${RESULTS_DIR}/mixed-single-${TIMESTAMP}-summary.json" \
+    "${SCRIPT_DIR}/mixed-chat-test.js"
 
 echo ""
 echo "=========================================="

@@ -15,6 +15,12 @@ public interface ChatRoomMemberRepository extends JpaRepository<ChatRoomMember, 
 
     List<ChatRoomMember> findAllByChatRoomId(Long chatRoomId);
 
+    @Query("""
+            SELECT m.user.id FROM ChatRoomMember m
+            WHERE m.chatRoom.id = :roomId
+            """)
+    List<Long> findUserIdsByRoomId(@Param("roomId") Long roomId);
+
     boolean existsByChatRoomIdAndUserId(Long chatRoomId, Long userId);
 
     // 발신자를 제외한 같은 방 멤버들의 unreadCount 증가
