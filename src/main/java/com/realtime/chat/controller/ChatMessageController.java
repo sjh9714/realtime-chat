@@ -2,6 +2,8 @@ package com.realtime.chat.controller;
 
 import com.realtime.chat.common.BusinessException;
 import com.realtime.chat.domain.User;
+import com.realtime.chat.dto.MessagePublishAckResponse;
+import com.realtime.chat.dto.MessagePublishErrorResponse;
 import com.realtime.chat.dto.SendMessageRequest;
 import com.realtime.chat.event.ChatMessageEvent;
 import com.realtime.chat.producer.ChatMessageProducer;
@@ -13,9 +15,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
 
 // WebSocket STOMP 메시지 핸들러
 @Slf4j
@@ -23,15 +28,21 @@ import java.security.Principal;
 @RequiredArgsConstructor
 public class ChatMessageController {
 
+    private static final String MESSAGE_ACK_DESTINATION = "/queue/messages/ack";
+    private static final String MESSAGE_ERROR_DESTINATION = "/queue/messages/error";
+
     private final ChatMessageProducer chatMessageProducer;
     private final ChatRoomMemberRepository chatRoomMemberRepository;
     private final UserRepository userRepository;
     private final Counter messagesSentCounter;
+    private final SimpMessagingTemplate messagingTemplate;
 
     // 클라이언트가 /app/chat.send로 메시지를 보내면 Kafka로 발행
     @MessageMapping("/chat.send")
     public void sendMessage(@Payload SendMessageRequest request, Principal principal) {
         Long userId = Long.parseLong(principal.getName());
+        String userDestination = principal.getName();
+        UUID clientMessageId = resolveClientMessageId(request);
         log.debug("메시지 수신: userId={}, roomId={}", userId, request.getRoomId());
 
         // 채팅방 멤버인지 확인
@@ -50,7 +61,35 @@ public class ChatMessageController {
                 request.getType()
         );
 
-        chatMessageProducer.sendMessage(event);
-        messagesSentCounter.increment();
+        chatMessageProducer.sendMessage(event)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        String reason = failureReason(ex);
+                        log.warn("Kafka publish NACK 전송: userId={}, roomId={}, clientMessageId={}, reason={}",
+                                userId, request.getRoomId(), clientMessageId, reason);
+                        messagingTemplate.convertAndSendToUser(
+                                userDestination,
+                                MESSAGE_ERROR_DESTINATION,
+                                MessagePublishErrorResponse.failed(clientMessageId, request.getRoomId(), reason)
+                        );
+                        return;
+                    }
+
+                    messagesSentCounter.increment();
+                    messagingTemplate.convertAndSendToUser(
+                            userDestination,
+                            MESSAGE_ACK_DESTINATION,
+                            MessagePublishAckResponse.accepted(clientMessageId, request.getRoomId())
+                    );
+                });
+    }
+
+    private UUID resolveClientMessageId(SendMessageRequest request) {
+        return request.getClientMessageId() != null ? request.getClientMessageId() : UUID.randomUUID();
+    }
+
+    private String failureReason(Throwable ex) {
+        Throwable cause = ex instanceof CompletionException && ex.getCause() != null ? ex.getCause() : ex;
+        return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
     }
 }

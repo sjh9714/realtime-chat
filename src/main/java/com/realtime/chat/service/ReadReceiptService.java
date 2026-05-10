@@ -49,7 +49,12 @@ public class ReadReceiptService {
             member.updateLastReadMessageId(event.getLastReadMessageId());
 
             // DB에서 실제 unreadCount 재계산
-            int unreadCount = messageRepository.countUnreadMessages(event.getRoomId(), event.getLastReadMessageId());
+            int unreadCount = messageRepository.countUnreadMessages(
+                    event.getRoomId(),
+                    event.getUserId(),
+                    event.getLastReadMessageId(),
+                    member.getJoinedAt()
+            );
             member.updateUnreadCount(unreadCount);
 
             // Redis 캐시 업데이트

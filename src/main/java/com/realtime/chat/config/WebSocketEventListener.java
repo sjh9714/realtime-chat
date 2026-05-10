@@ -27,29 +27,38 @@ public class WebSocketEventListener {
     @EventListener
     public void handleWebSocketConnect(SessionConnectEvent event) {
         Long userId = extractUserId(event.getMessage().getHeaders().get("simpUser"));
-        if (userId != null) {
-            presenceService.setOnline(userId);
-            redisPubSubService.publishPresence(PresenceEvent.online(userId));
+        String sessionId = StompHeaderAccessor.wrap(event.getMessage()).getSessionId();
+        if (userId != null && sessionId != null) {
+            boolean becameOnline = presenceService.setOnline(userId, sessionId);
+            if (becameOnline) {
+                redisPubSubService.publishPresence(PresenceEvent.online(userId));
+            }
             websocketSessionGauge.incrementAndGet();
-            log.info("WebSocket 연결: userId={}, sessionId={}", userId,
-                    StompHeaderAccessor.wrap(event.getMessage()).getSessionId());
+            log.info("WebSocket 연결: userId={}, sessionId={}", userId, sessionId);
         }
     }
 
     @EventListener
     public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
         Long userId = extractUserId(event.getUser());
-        if (userId != null) {
-            presenceService.setOffline(userId);
-            redisPubSubService.publishPresence(PresenceEvent.offline(userId));
-            websocketSessionGauge.decrementAndGet();
+        String sessionId = event.getSessionId();
+        if (userId != null && sessionId != null) {
+            boolean becameOffline = presenceService.setOffline(userId, sessionId);
+            if (becameOffline) {
+                redisPubSubService.publishPresence(PresenceEvent.offline(userId));
+            }
+            websocketSessionGauge.updateAndGet(count -> Math.max(0, count - 1));
             log.info("WebSocket 해제: userId={}, sessionId={}", userId, event.getSessionId());
         }
     }
 
     private Long extractUserId(Object principal) {
         if (principal instanceof UsernamePasswordAuthenticationToken auth) {
-            return (Long) auth.getPrincipal();
+            Object userId = auth.getPrincipal();
+            if (userId instanceof Long id) {
+                return id;
+            }
+            return Long.parseLong(auth.getName());
         }
         return null;
     }

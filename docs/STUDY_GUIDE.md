@@ -971,7 +971,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker("/topic");  // 서버→클라이언트 구독 prefix
+        registry.enableSimpleBroker("/topic", "/queue");  // room topic + user queue
+        registry.setUserDestinationPrefix("/user");       // /user/queue/... 응답 prefix
         registry.setApplicationDestinationPrefixes("/app");  // 클라이언트→서버 prefix
     }
 
@@ -983,7 +984,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(webSocketAuthInterceptor);  // 인증 인터셉터 등록
+        registration.interceptors(
+                webSocketAuthInterceptor,
+                webSocketAuthorizationInterceptor,
+                rateLimitInterceptor
+        );
     }
 }
 ```
