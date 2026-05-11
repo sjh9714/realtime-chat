@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -23,10 +25,18 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Check whitespace
-        run: git diff --check
+      - name: Check whitespace in latest change
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            git diff --check "origin/${{ github.base_ref }}...HEAD"
+          else
+            git diff-tree --check --no-commit-id --root -r HEAD
+          fi
 
       - name: Check source line layout
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -40,12 +50,16 @@ jobs:
 
           bad = []
           for path in targets:
-              lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-              if len(lines) <= 3:
-                  bad.append((str(path), len(lines)))
+              text = path.read_text(encoding="utf-8", errors="ignore")
+              lines = text.splitlines()
+              raw = path.read_bytes()
+              if raw.count(b"\n") == 0 and raw.count(b"\r") > 0:
+                  bad.append((str(path), "CR-only line endings"))
+              elif len(lines) <= 3:
+                  bad.append((str(path), f"too few lines: {len(lines)}"))
 
           if bad:
-              print("Too-short source files:")
+              print("Potential layout issues:")
               for row in bad:
                   print(row)
               raise SystemExit(1)
@@ -53,14 +67,14 @@ jobs:
           print(f"OK: checked {len(targets)} files")
           PY
 
-      - name: Set up k6
-        uses: grafana/setup-k6-action@v1
-
-      - name: Inspect mixed k6 scenario
-        run: k6 inspect k6/mixed-chat-test.js
-
       - name: Run tests
         run: ./gradlew test
 
       - name: Build
         run: ./gradlew build
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Inspect mixed k6 scenario
+        run: k6 inspect k6/mixed-chat-test.js

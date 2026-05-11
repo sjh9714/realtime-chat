@@ -111,7 +111,7 @@ ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻이다. PostgreSQ
 
 Kafka consumer는 manual ack와 `DefaultErrorHandler`, `DeadLetterPublishingRecoverer`를 사용한다. persistence consumer 실패는 통합 테스트에서 DLT 격리와 manual replay를 검증한다.
 
-`DltReplayService`는 `chat.messages.dlt`에 격리된 `ChatMessageEvent`를 원래 `chat.messages` topic으로 재발행하는 manual replay utility다. 운영용 자동 복구 시스템이 아니라 원인 제거 후 수동으로 호출하는 내부 service utility다.
+`DltReplayService`는 `chat.messages.dlt`에 격리된 `ChatMessageEvent`를 원래 `chat.messages` topic으로 재발행하는 manual replay utility다. 자동 복구 기능이 아니라 원인 제거 후 수동으로 호출하는 내부 service utility다.
 
 - replay key는 DLT record key가 있으면 그대로 사용하고, 없으면 `event.roomId`를 사용한다.
 - replay 시작/성공/실패 로그에는 `messageKey`, DLT topic/partition/offset, target topic, key, target offset을 남긴다.

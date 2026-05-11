@@ -1,165 +1,578 @@
 # Realtime Chat
 
-Kafka와 Redis Pub/Sub 기반의 다중 인스턴스 실시간 채팅 시스템에서 메시지 순서, Kafka publish ACK/NACK, 구독 권한, 읽음 정합성, DLT 격리와 수동 replay utility를 검증한 Spring Boot 백엔드 프로젝트입니다.
+Kafka와 Redis Pub/Sub 기반의 다중 인스턴스 실시간 채팅 시스템에서 **구독 권한, Kafka publish ACK/NACK, room 단위 메시지 순서, 읽음 정합성, DLT 격리와 수동 replay utility**를 검증한 Spring Boot 백엔드 프로젝트입니다.
+
+이 프로젝트는 단순히 WebSocket 채팅 기능을 구현하는 것이 아니라, 실시간 메시징 시스템에서 쉽게 깨지는 **권한, 순서, 중복, 장애 복구, presence, cache invalidation** 문제를 코드와 테스트로 검증하는 데 초점을 둡니다.
+
+![CI](https://github.com/jinhyuk9714/realtime-chat/actions/workflows/ci.yml/badge.svg)
+
+---
 
 ## 핵심 문제
 
-실시간 채팅 백엔드는 WebSocket 연결만으로 완성되지 않습니다. 다중 서버 환경에서는 방별 메시지 순서, 서버 간 브로드캐스트, 구독 권한, 장애 복구, 읽음 수 정합성, presence 상태가 함께 맞아야 합니다.
+실시간 채팅 백엔드는 WebSocket 연결만으로 완성되지 않습니다. 다중 서버 환경에서는 메시지가 여러 인스턴스, Kafka, Redis Pub/Sub, DB 저장 경로를 거치기 때문에 아래 문제가 함께 해결되어야 합니다.
 
-이 프로젝트는 기능 나열보다 백엔드 포트폴리오에서 중요한 운영 문제를 코드와 테스트로 닫는 데 초점을 둡니다.
+| 문제 | 구현한 대응 |
+|---|---|
+| 유효한 JWT 사용자가 `roomId`만 알고 다른 방을 구독할 수 있는가 | STOMP `SUBSCRIBE /topic/room.{roomId}` 시 room membership 검증 |
+| 메시지 전송 요청이 Kafka publish에 성공했는지 클라이언트가 알 수 있는가 | `/user/queue/messages/ack`, `/user/queue/messages/error` ACK/NACK 응답 |
+| 같은 채팅방 메시지가 순서대로 처리되는가 | Kafka key를 `roomId`로 사용하고, 같은 room 내 partition offset 순서를 검증 |
+| consumer 실패 메시지를 격리하고 재처리할 수 있는가 | `chat.messages.dlt` 격리와 `DltReplayService` manual replay utility |
+| 읽음 수가 발신자 본인 메시지나 참여 전 메시지까지 포함하지 않는가 | `senderId != userId`, `joinedAt`, `lastReadMessageId` 기준으로 unread count 재계산 |
+| 한 사용자가 여러 세션으로 접속했을 때 일부 세션 종료로 offline 처리되는가 | `userId + sessionId` 단위 Redis TTL presence |
+| 메시지 저장 시 관계없는 사용자의 채팅방 목록 cache까지 삭제되는가 | 해당 room member의 `rooms::{userId}` cache만 evict |
 
-- 유효한 JWT를 가진 사용자가 `roomId`만 알고 다른 방을 구독할 수 없는가
-- 메시지가 Kafka publish 단계에서 accepted 또는 failed 되었는지 클라이언트가 알 수 있는가
-- 같은 room의 메시지가 같은 Kafka partition에서 offset 순서대로 처리되는가
-- persistence consumer 실패 메시지를 DLT로 격리하고 수동 replay할 수 있는가
-- unread count가 발신자 본인 메시지와 참여 전 메시지를 제외하는가
-- 한 사용자의 여러 WebSocket session 중 일부만 끊겨도 online 상태가 유지되는가
-- 메시지 저장 시 관계없는 사용자의 채팅방 목록 cache까지 지우지 않는가
+---
 
 ## 아키텍처 요약
 
-<p align="center">
-  <img src="docs/architecture.svg" alt="Realtime Chat Architecture" width="800"/>
-</p>
+```mermaid
+flowchart LR
+    Client[Client<br/>STOMP WebSocket] -->|CONNECT / SEND / SUBSCRIBE| App1[Spring Boot App]
+
+    App1 -->|CONNECT JWT 인증| Auth[WebSocketAuthInterceptor]
+    App1 -->|SUBSCRIBE room member 검증| Authz[WebSocketAuthorizationInterceptor]
+    App1 -->|SEND room member 검증| Send[ChatMessageController]
+
+    Send -->|Kafka publish<br/>key = roomId| Kafka[(Kafka<br/>chat.messages)]
+
+    Kafka -->|consumer group: persistence| Persist[MessagePersistenceConsumer]
+    Kafka -->|consumer group: broadcast| Broadcast[MessageBroadcastConsumer]
+
+    Persist --> Postgres[(PostgreSQL<br/>messages)]
+    Broadcast --> RedisPubSub[(Redis Pub/Sub)]
+
+    RedisPubSub --> App1
+    RedisPubSub --> App2[Spring Boot App #2]
+
+    App1 -->|/topic/room.{roomId}| Client
+    App2 -->|/topic/room.{roomId}| OtherClients[Other Clients]
+
+    Persist -->|failure| DLT[(chat.messages.dlt)]
+    DLT -->|manual replay| Replay[DltReplayService]
+    Replay --> Kafka
+```
+
+### 메시지 흐름
 
 ```text
 Client
-  -> STOMP CONNECT / SEND / SUBSCRIBE
-  -> Spring Boot App
-      - CONNECT JWT 인증
-      - /topic/room.{roomId} SUBSCRIBE 멤버십 검증
-      - /app/chat.send 방 멤버 검증
-      - Kafka publish ACK/NACK를 user destination으로 응답
-  -> Kafka chat.messages (key = roomId)
-      - persistence consumer group -> PostgreSQL 저장
-      - broadcast consumer group -> Redis Pub/Sub
-  -> App instances
-      - Redis Pub/Sub 수신 후 /topic/room.{roomId} 브로드캐스트
+  -> STOMP CONNECT /ws
+  -> SUBSCRIBE /topic/room.{roomId}
+  -> SUBSCRIBE /user/queue/messages/ack
+  -> SUBSCRIBE /user/queue/messages/error
+  -> SEND /app/chat.send
+
+Spring Boot
+  -> JWT 인증
+  -> room membership 검증
+  -> Kafka publish chat.messages, key = roomId
+  -> Kafka publish 성공 시 /user/queue/messages/ack
+  -> Kafka publish 실패 시 /user/queue/messages/error
+
+Kafka
+  -> persistence consumer group: PostgreSQL 저장
+  -> broadcast consumer group: Redis Pub/Sub 발행
+
+Redis Pub/Sub
+  -> 각 app instance가 수신
+  -> /topic/room.{roomId}로 WebSocket broadcast
 ```
 
-같은 채팅방의 메시지는 Kafka key를 `roomId`로 사용해 동일 partition 안에서 순서를 유지합니다. 서로 다른 채팅방 사이의 전역 순서는 보장하지 않습니다.
-
-메시지 저장은 `messageKey`와 DB unique constraint로 중복 consume에 대한 멱등성을 확보합니다. DLT replay도 같은 `messageKey` 기준으로 중복 저장을 방지합니다.
+---
 
 ## 검증한 항목
 
 | 영역 | 현재 검증 범위 |
-| --- | --- |
+|---|---|
 | STOMP 인증/인가 | `CONNECT` JWT 인증, `/topic/room.{roomId}` 구독 시 room member 검증 |
 | 메시지 ACK/NACK | Kafka publish 성공 시 `/user/queue/messages/ack`, 실패 시 `/user/queue/messages/error` 응답 |
 | Kafka DLT | persistence consumer 실패 후 `chat.messages.dlt` 격리, `DltReplayService` manual replay, replay 중복 저장 방지 |
-| 메시지 순서 | 같은 `roomId`로 발행한 메시지가 같은 partition에 저장되고 offset 순서와 DB 조회 순서가 일치하는지 검증 |
+| 메시지 순서 | 같은 `roomId`로 발행한 메시지가 같은 partition에 저장되고, offset 순서와 DB 조회 순서가 일치하는지 검증 |
 | 읽음 처리 | `lastReadMessageId` room 검증, sender 본인 메시지 제외, `joinedAt` 이전 메시지 제외, 중복 read receipt idempotency |
-| Presence | `userId + sessionId` 단위 Redis TTL key와 user session set, 마지막 session 종료 시 offline |
+| Presence | `userId + sessionId` 단위 Redis TTL key와 user session set, 마지막 session 종료 시 offline 처리 |
 | Cache Aside | 메시지 저장 후 해당 room 멤버의 `rooms::{userId}` cache만 evict |
 | Testcontainers | PostgreSQL, Kafka, Redis 기반 통합 테스트 |
+| k6 | REST 조회 부하 테스트, WebSocket 연결 smoke 테스트, mixed scenario 추가 |
 
-## WebSocket 경로
+---
 
-WebSocket endpoint는 `/ws`입니다.
+## Evidence Matrix
+
+| 구분 | 항목 | 결과 / 상태 | 조건 |
+|---|---|---|---|
+| Measured | 채팅방 조회 API 최적화 | 937 -> 1,598 RPS | k6 200 VU / 50s / local Docker 기준 |
+| Measured | p95 응답 시간 | 212.85ms -> 149.22ms | `GET /api/rooms` 중심 REST 조회 테스트 |
+| Measured | N+1 제거 | 방 N개 기준 2N+1회 쿼리 -> 1회 쿼리 | JPQL Projection |
+| Measured | WebSocket 연결 smoke | 2대 합산 1,158 sessions, 연결 체크 성공률 100% | send-to-receive latency 측정 아님 |
+| Verified | SUBSCRIBE 권한 검증 | 비멤버 room topic 구독 거부 | Unit + STOMP integration 테스트 |
+| Verified | Kafka publish ACK/NACK | user destination으로 ACK/NACK 전달 | Kafka publish accepted/failed 기준 |
+| Verified | DLT manual replay | replay 후 `messageKey` 기준 중복 저장 방지 | Testcontainers 기반 통합 테스트 |
+| Verified | room 단위 ordering | 동일 room 메시지의 partition / offset 순서 검증 | 전역 순서 보장 아님 |
+| Verified | read receipt 정합성 | sender 제외, joinedAt 이전 메시지 제외 | Service / integration 테스트 |
+| Verified | multi-session presence | 마지막 session 종료 시에만 offline | Redis session key / set |
+| Verified | selective cache eviction | room member의 `rooms::{userId}`만 evict | 관계없는 사용자 cache 유지 |
+| Pending | mixed traffic p95 latency | 결과 미측정 | `k6/mixed-chat-test.js` 추가됨 |
+| Pending | send-to-receive latency | 결과 미측정 | scenario added, result pending |
+| Pending | WebSocket delivery completeness | 결과 미측정 | 현재 공개 수치는 연결 smoke 성격 |
+
+---
+
+## 주요 설계 결정
+
+### 1. STOMP `CONNECT` 인증과 `SUBSCRIBE` 인가를 분리
+
+`CONNECT`에서 JWT를 검증하는 것만으로는 충분하지 않습니다. 인증된 사용자가 `roomId`를 추측해 `/topic/room.{roomId}`를 구독할 수 있기 때문입니다.
+
+그래서 inbound channel에 두 단계 검증을 둡니다.
+
+| 단계 | 담당 | 목적 |
+|---|---|---|
+| `CONNECT` | `WebSocketAuthInterceptor` | JWT 검증, STOMP Principal에 `userId` 바인딩 |
+| `SUBSCRIBE` | `WebSocketAuthorizationInterceptor` | `/topic/room.{roomId}` 구독 시 room member 검증 |
+| `SEND` | `ChatMessageController` | 메시지 전송 시 room member 재검증 |
+
+비멤버 구독과 malformed room topic은 거부하고, `/topic/presence`처럼 room topic이 아닌 destination은 기존 정책을 유지합니다.
+
+---
+
+### 2. Kafka publish ACK/NACK
+
+`/app/chat.send`는 메시지를 직접 DB에 저장하지 않고 Kafka `chat.messages` topic에 publish합니다.
+
+```text
+Client SEND /app/chat.send
+  -> room member check
+  -> KafkaTemplate.send(chat.messages, key = roomId, event)
+  -> success callback: /user/queue/messages/ack
+  -> failure callback: /user/queue/messages/error
+```
+
+ACK payload 예시:
+
+```json
+{
+  "clientMessageId": "9b75d8e9-5f73-4f6d-8f1a-3b1c0d7e8d10",
+  "roomId": 1,
+  "status": "ACCEPTED",
+  "acceptedAt": "2026-05-11T10:15:30"
+}
+```
+
+NACK payload 예시:
+
+```json
+{
+  "clientMessageId": "9b75d8e9-5f73-4f6d-8f1a-3b1c0d7e8d10",
+  "roomId": 1,
+  "status": "FAILED",
+  "reason": "Kafka publish failed"
+}
+```
+
+> ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻입니다. PostgreSQL 저장 완료, Redis Pub/Sub broadcast 완료, 상대 클라이언트 수신 완료를 의미하지 않습니다.
+
+`clientMessageId`는 ACK/NACK correlation 용도입니다. 현재 DB 저장 멱등성은 Kafka event의 `messageKey` 기준입니다. 클라이언트 재시도까지 DB-level idempotency로 막으려면 `(senderId, clientMessageId)` unique constraint가 추가로 필요합니다.
+
+---
+
+### 3. room 단위 Kafka ordering
+
+Kafka의 전역 순서를 보장하지 않습니다. 이 프로젝트에서 검증한 순서 범위는 **동일 room 내 partition ordering**입니다.
+
+```text
+producer key = roomId
+  -> 같은 roomId는 같은 Kafka partition
+  -> 같은 partition 안에서는 offset 순서 보장
+  -> consumer 저장 시 kafkaPartition, kafkaOffset 기록
+  -> DB 조회 시 offset 순서 검증
+```
+
+| 보장 범위 | 설명 |
+|---|---|
+| 같은 room 안의 메시지 순서 | `roomId` key 기반 partition ordering |
+| 서로 다른 room 간 순서 | 보장하지 않음 |
+| 모든 클라이언트 수신 완료 | 현재 성능 결과로 측정하지 않음 |
+| send-to-receive p95 latency | mixed scenario는 추가했지만 결과는 pending |
+
+---
+
+### 4. DLT 격리와 manual replay utility
+
+Kafka consumer 실패 메시지는 DLT로 격리합니다. `DltReplayService`는 `chat.messages.dlt`에 쌓인 `ChatMessageEvent`를 원래 topic인 `chat.messages`로 다시 발행하는 내부 utility입니다.
+
+```text
+consumer failure
+  -> retry
+  -> chat.messages.dlt
+  -> 원인 제거
+  -> DltReplayService manual replay
+  -> chat.messages
+  -> consumer 재처리
+```
+
+Replay 중복 저장은 `messageKey` unique constraint와 consumer의 `existsByMessageKey` 체크로 방지합니다.
+
+> 이 기능은 자동 복구 시스템이 아닙니다. 운영 환경에서는 replay 권한 제어, 감사 로그, replay 대상 필터링, 재처리 결과 추적이 추가로 필요합니다.
+
+---
+
+### 5. read receipt 정합성
+
+읽음 처리는 단순히 `lastReadMessageId` 이후 메시지를 세지 않습니다. 아래 조건을 함께 적용합니다.
+
+```text
+roomId가 동일해야 함
+message.id > lastReadMessageId
+message.senderId != userId
+message.createdAt >= member.joinedAt
+```
+
+또한 `lastReadMessageId`가 해당 room의 메시지인지 확인하고, 사용자가 방에 참여하기 전에 생성된 메시지는 읽음 기준으로 사용할 수 없도록 검증합니다.
+
+중복 read receipt가 들어와도 기존 `lastReadMessageId`보다 크지 않으면 상태를 되돌리지 않습니다.
+
+---
+
+### 6. session 단위 presence
+
+Presence는 user 단일 key가 아니라 session 단위로 관리합니다.
+
+```text
+user:presence:{userId}:session:{sessionId}  TTL 60s
+user:presence:{userId}:sessions            Redis Set
+```
+
+동작 방식:
+
+| 이벤트 | 처리 |
+|---|---|
+| WebSocket connect | session key 생성, session set에 추가 |
+| heartbeat | session key TTL 갱신 |
+| disconnect | 해당 session 제거 |
+| 마지막 session disconnect | offline event 발행 |
+| 일부 session만 disconnect | online 유지 |
+
+클라이언트는 `/app/presence.heartbeat`를 TTL보다 짧은 주기로 보내야 합니다.
+
+---
+
+### 7. Cache Aside selective eviction
+
+채팅방 목록은 사용자별로 cache합니다.
+
+```java
+@Cacheable(value = "rooms", key = "#userId")
+```
+
+메시지가 저장되면 전체 `rooms` cache를 clear하지 않고, 해당 room 멤버의 cache만 evict합니다.
+
+| 이벤트 | cache 무효화 범위 |
+|---|---|
+| 메시지 저장 | 해당 room 멤버의 `rooms::{userId}` |
+| 읽음 처리 | 읽음 처리한 user의 `rooms::{userId}` |
+| 방 생성 / 참여 | 현재 구현은 기존 정책 유지 |
+
+---
+
+## 성능 결과 요약
+
+상세 내용은 [`docs/PERF_RESULT.md`](docs/PERF_RESULT.md)에 정리되어 있습니다.
+
+### REST 조회 API 최적화
+
+이 수치는 채팅방 조회 API 중심의 REST 부하 테스트 결과입니다. 메시지 전송이 포함된 mixed traffic 결과가 아닙니다.
+
+| 메트릭 | Before | After | 개선 |
+|---|---:|---:|---:|
+| RPS | 937 | 1,598 | +70.5% |
+| p50 | 54.27ms | 16.56ms | -69.5% |
+| p90 | 172.33ms | 109.37ms | -36.5% |
+| p95 | 212.85ms | 149.22ms | -29.9% |
+| 총 요청 수 | 67,417 | 118,900 | +76.4% |
+| 에러율 | 0% | 0% | - |
+
+테스트 조건:
+
+| 항목 | 값 |
+|---|---|
+| 시나리오 | 채팅방 목록 / 상세 / 메시지 이력 조회 |
+| 부하 | k6 200 VU |
+| duration | 50s, warm-up 10s / load 30s / cool-down 10s |
+| 데이터 | 200 users, 10 group rooms |
+| 환경 | local Docker 기준 |
+
+주요 개선:
+
+| 개선 항목 | Before | After |
+|---|---|---|
+| N+1 쿼리 | 방 N개 -> 2N+1회 쿼리 | JPQL Projection 단일 쿼리 |
+| DB 조회 | 반복 조회마다 DB 접근 | Redis cache hit 시 DB 조회 제거 |
+| 주요 조건 쿼리 | 일부 index 활용 부족 | message key, roomId/id, userId 인덱스 사용 확인 |
+
+### WebSocket 부하 테스트
+
+현재 공개된 WebSocket 수치는 연결 안정성과 제한된 send/receive smoke 테스트입니다.
+
+| 항목 | 결과 |
+|---|---|
+| 단일 인스턴스 동시 session | 579 |
+| 2대 스케일아웃 합산 session | 1,158 |
+| 연결 체크 성공률 | 100% |
+| 단일 인스턴스 STOMP 연결 p95 | 5.52ms |
+| 측정 범위 | STOMP 연결, 구독, 제한된 메시지 송수신 smoke |
+
+이 수치는 다음을 의미하지 않습니다.
+
+| 아직 측정하지 않은 것 | 상태 |
+|---|---|
+| send-to-receive p95 latency | Pending |
+| 모든 전송 메시지의 delivery completeness | Pending |
+| room별 수신 순서 정확도 성능 결과 | Pending |
+| mixed traffic 기준 RPS / p95 | Pending |
+
+### Mixed Chat Scenario
+
+`k6/mixed-chat-test.js`를 추가했습니다.
+
+| 항목 | 상태 |
+|---|---|
+| 채팅방 목록 조회 | 포함 |
+| 메시지 이력 조회 | 포함 |
+| WebSocket 연결 | 포함 |
+| room topic 구독 | 포함 |
+| user ACK/NACK queue 구독 | 포함 |
+| 메시지 전송 | 포함 |
+| ACK/NACK 수신 | 포함 |
+| read receipt API 호출 | 포함 |
+| 성능 결과 | scenario added, result pending |
+
+기록하는 지표:
+
+| 지표 | 설명 |
+|---|---|
+| `http_req_duration` | HTTP 요청 latency |
+| `http_req_failed` | HTTP 에러율 |
+| `message_send_ack_latency` | STOMP SEND -> Kafka publish ACK 수신까지 |
+| `send_to_receive_latency` | 보낸 메시지가 room topic으로 돌아온 경우 |
+| `read_receipt_api_latency` | read receipt API 응답 시간 |
+| `messages_sent` | 전송한 메시지 수 |
+| `acks_received` | ACK 수신 수 |
+| `nacks_received` | NACK 수신 수 |
+| `messages_received` | WebSocket MESSAGE 수신 수 |
+| `mixed_error_rate` | mixed scenario error rate |
+
+---
+
+## API 요약
+
+### Auth
+
+| Method | Path | 설명 |
+|---|---|---|
+| `POST` | `/api/auth/signup` | 회원가입 |
+| `POST` | `/api/auth/login` | 로그인 |
+
+### Chat Room
+
+| Method | Path | 설명 |
+|---|---|---|
+| `POST` | `/api/rooms/direct` | 1:1 채팅방 생성 |
+| `POST` | `/api/rooms/group` | 그룹 채팅방 생성 |
+| `POST` | `/api/rooms/{roomId}/join` | 그룹 채팅방 참여 |
+| `GET` | `/api/rooms` | 내 채팅방 목록 |
+| `GET` | `/api/rooms/{roomId}` | 채팅방 상세 |
+| `GET` | `/api/rooms/{roomId}/messages` | 메시지 이력 |
+| `POST` | `/api/rooms/{roomId}/read` | 읽음 처리 |
+
+### WebSocket / STOMP
+
+WebSocket endpoint:
+
+```text
+/ws
+```
 
 | Client action | Destination |
-| --- | --- |
+|---|---|
+| STOMP 연결 | `CONNECT /ws` |
 | 메시지 전송 | `/app/chat.send` |
 | 방 메시지 구독 | `/topic/room.{roomId}` |
 | Presence heartbeat | `/app/presence.heartbeat` |
 | Kafka publish ACK 구독 | `/user/queue/messages/ack` |
 | Kafka publish NACK 구독 | `/user/queue/messages/error` |
 
-ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻입니다. PostgreSQL 저장 완료나 상대 클라이언트 수신 완료를 의미하지 않습니다. 저장과 브로드캐스트는 Kafka consumer가 비동기로 처리합니다.
+메시지 전송 payload 예시:
 
-`clientMessageId`는 ACK/NACK correlation 용도입니다. 현재 DB 저장 멱등성은 Kafka event의 `messageKey` 기준이며, 클라이언트 재시도까지 DB-level idempotency로 막으려면 `(senderId, clientMessageId)` unique constraint가 별도로 필요합니다.
+```json
+{
+  "clientMessageId": "9b75d8e9-5f73-4f6d-8f1a-3b1c0d7e8d10",
+  "roomId": 1,
+  "content": "hello",
+  "type": "TEXT"
+}
+```
 
-## 성능 결과
+읽음 처리 payload 예시:
 
-상세 내용은 [docs/PERF_RESULT.md](docs/PERF_RESULT.md)에 있습니다.
+```json
+{
+  "lastReadMessageId": 100
+}
+```
 
-| 구분 | 측정 범위 | 결과 |
-| --- | --- | --- |
-| 채팅방 조회 API 최적화 | `GET /api/rooms` 중심 REST 조회 부하 테스트 | RPS 937 -> 1,598, p50 54.27ms -> 16.56ms |
-| DB 쿼리 최적화 | N+1 제거, 주요 쿼리 EXPLAIN ANALYZE | 채팅방 목록 단일 쿼리 0.392ms, 주요 쿼리 인덱스 사용 확인 |
-| WebSocket 부하 | STOMP 연결 안정성 및 제한된 send/receive smoke 성격 | 2대 합산 동시 WebSocket 1,158 session, 연결 체크 성공률 100% |
-| Mixed chat scenario | 조회, 전송, 읽음, WebSocket 수신을 섞은 신규 k6 시나리오 | scenario added, result pending |
+---
 
-현재 공개된 WebSocket 수치는 연결 안정성과 간단한 송수신 흐름 확인 결과입니다. send-to-receive end-to-end latency, 수신 completeness, 메시지 순서 정확도에 대한 성능 수치는 아직 측정 결과로 기록하지 않습니다.
+## 실행 방법
 
-## 테스트 실행 방법
+### 1. 전체 Docker Compose 실행
 
-단위/통합 테스트는 Testcontainers로 PostgreSQL, Kafka, Redis를 구동합니다. Docker가 실행 중이어야 합니다.
+PostgreSQL, Redis, Kafka, Kafka UI, Prometheus, Grafana, app 2대를 함께 실행합니다.
+
+```bash
+docker compose up -d
+```
+
+서비스 포트:
+
+| 서비스 | URL |
+|---|---|
+| App #1 | `http://localhost:8081` |
+| App #2 | `http://localhost:8082` |
+| Kafka UI | `http://localhost:8090` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
+
+Grafana 기본 계정:
+
+```text
+admin / admin
+```
+
+### 2. 인프라만 실행하고 애플리케이션 로컬 실행
+
+```bash
+docker compose up -d postgres redis kafka kafka-ui
+
+./gradlew bootRun
+```
+
+로컬 실행 시 기본 app URL:
+
+```text
+http://localhost:8080
+```
+
+### 3. 테스트 실행
+
+Testcontainers로 PostgreSQL, Kafka, Redis를 띄우므로 Docker가 실행 중이어야 합니다.
 
 ```bash
 ./gradlew test
 ./gradlew build
 ```
 
-k6 스크립트 문법 검증:
+### 4. k6 스크립트 문법 검증
 
 ```bash
 k6 inspect k6/mixed-chat-test.js
 ```
 
-부하 테스트 실행 예시:
+### 5. 부하 테스트 실행 예시
+
+REST 조회 API 테스트:
 
 ```bash
-docker compose up -d
 k6 run --env BASE_URL=http://localhost:8081 k6/rest-api-test.js
-k6 run --env BASE_URL=http://localhost:8081 --env WS_URL=ws://localhost:8081/ws k6/websocket-test.js
-k6 run --env BASE_URL=http://localhost:8081 --env WS_URL=ws://localhost:8081/ws k6/mixed-chat-test.js
 ```
 
-## 실행 방법
-
-Docker Compose로 PostgreSQL, Redis, Kafka, Kafka UI, Prometheus, Grafana, 애플리케이션 2대를 실행합니다.
+WebSocket smoke 테스트:
 
 ```bash
-docker compose up -d
+k6 run \
+  --env BASE_URL=http://localhost:8081 \
+  --env WS_URL=ws://localhost:8081/ws \
+  k6/websocket-test.js
 ```
 
-애플리케이션만 로컬에서 실행하려면 인프라를 먼저 띄운 뒤 Gradle을 사용합니다.
+Mixed chat scenario:
 
 ```bash
-docker compose up -d postgres redis kafka kafka-ui
-./gradlew bootRun
+k6 run \
+  --env BASE_URL=http://localhost:8081 \
+  --env WS_URL=ws://localhost:8081/ws \
+  k6/mixed-chat-test.js
 ```
+
+기존 user token과 room을 사용하려면:
+
+```bash
+k6 run \
+  --env BASE_URL=http://localhost:8081 \
+  --env WS_URL=ws://localhost:8081/ws \
+  --env AUTH_TOKEN={jwt} \
+  --env ROOM_ID=1 \
+  k6/mixed-chat-test.js
+```
+
+---
 
 ## 기술 스택
 
 | 영역 | 기술 |
-| --- | --- |
-| Backend | Java 21, Spring Boot 3.4.3, Spring Web, Spring Security |
+|---|---|
+| Language | Java 21 |
+| Framework | Spring Boot 3.4.3 |
+| Web | Spring Web, Spring Security |
 | Realtime | Spring WebSocket, STOMP |
 | Messaging | Apache Kafka 3.9.0 |
-| Data | PostgreSQL 16, Redis 7 |
-| Observability | Actuator, Micrometer, Prometheus, Grafana |
-| Test / Perf | Testcontainers, JUnit 5, k6 |
-| Infra | Docker Compose, Gradle Kotlin DSL |
+| Cache / PubSub / Presence | Redis 7 |
+| Database | PostgreSQL 16 |
+| Persistence | Spring Data JPA, Hibernate |
+| Observability | Spring Actuator, Micrometer, Prometheus, Grafana |
+| Test | JUnit 5, Mockito, Testcontainers, Awaitility |
+| Performance | k6 |
+| Infra | Docker Compose |
+| Build | Gradle Kotlin DSL |
 
-## API 요약
+---
 
-| Method | Path | 설명 |
-| --- | --- | --- |
-| POST | `/api/auth/signup` | 회원가입 |
-| POST | `/api/auth/login` | 로그인 |
-| POST | `/api/rooms/direct` | 1:1 채팅방 생성 |
-| POST | `/api/rooms/group` | 그룹 채팅방 생성 |
-| POST | `/api/rooms/{roomId}/join` | 그룹 채팅방 참여 |
-| GET | `/api/rooms` | 내 채팅방 목록 |
-| GET | `/api/rooms/{roomId}` | 채팅방 상세 |
-| GET | `/api/rooms/{roomId}/messages` | 메시지 이력 |
-| POST | `/api/rooms/{roomId}/read` | 읽음 처리 |
+## 테스트 범위
+
+| 테스트 | 검증 내용 |
+|---|---|
+| `WebSocketAuthorizationInterceptorTest` | room topic SUBSCRIBE 권한 검증 |
+| `WebSocketSubscribeAuthorizationIntegrationTest` | 실제 STOMP client 기반 비멤버 구독 거부 |
+| `WebSocketAckIntegrationTest` | WebSocket ACK 수신 흐름 |
+| `MessageOrderingIntegrationTest` | 같은 room 내 Kafka partition / offset 순서 |
+| `DltReplayIntegrationTest` | DLT 격리, manual replay, 중복 replay 멱등성 |
+| `ReadReceiptServiceTest` | read receipt 정합성 |
+| `PresenceServiceTest` | multi-session presence |
+| `MessagePersistenceConsumerCacheTest` | room member selective cache eviction |
+| `ConsumerRecoveryIntegrationTest` | Kafka consumer 중복 처리 / 복구 흐름 |
+
+---
 
 ## 한계
 
-- ACK/NACK는 Kafka publish 단계의 결과이며 DB 저장 완료, WebSocket 수신 완료, 상대방 단말 표시 완료를 보장하지 않습니다.
-- `clientMessageId`는 ACK/NACK correlation 용도이며, 현재 DB-level idempotency는 `messageKey` 기준입니다.
-- Kafka 순서 보장은 같은 `roomId`가 같은 partition에 들어가는 범위에 한정됩니다. 서로 다른 room 간 전역 순서는 보장하지 않습니다.
-- DLT replay는 외부 운영 API가 아니라 내부 manual utility입니다. 운영 환경에서는 접근 제어, 감사 로그, replay 대상 필터링이 추가로 필요합니다.
-- Redis Pub/Sub broadcast 실패는 Kafka ack 전에 예외를 재전파하도록 검증했습니다. broadcast 실패의 DLT 적재는 같은 Kafka error handler 경로를 사용하지만, 현재 별도 end-to-end 통합 테스트는 persistence consumer DLT replay 범위에 집중되어 있습니다.
-- Presence heartbeat는 클라이언트가 TTL보다 짧은 주기로 `/app/presence.heartbeat`를 보내야 유지됩니다.
-- 기존 REST 부하 테스트는 조회 중심입니다. 신규 mixed k6 시나리오는 추가했지만 아직 성능 결과는 측정하지 않았습니다.
+| 항목 | 현재 한계 |
+|---|---|
+| ACK/NACK | Kafka publish 단계의 결과만 의미합니다. DB 저장 완료, WebSocket broadcast 완료, 상대방 수신 완료를 보장하지 않습니다. |
+| `clientMessageId` | ACK/NACK correlation 용도입니다. 현재 DB 저장 멱등성은 Kafka event의 `messageKey` 기준입니다. |
+| Kafka ordering | 같은 `roomId`가 같은 partition에 들어가는 범위에 한정됩니다. 서로 다른 room 간 전역 순서는 보장하지 않습니다. |
+| DLT replay | 내부 manual utility입니다. 운영 환경에서는 접근 제어, 감사 로그, replay 대상 필터링, 결과 추적이 필요합니다. |
+| Redis Pub/Sub broadcast 실패 | 실패 재전파와 no-ack 동작은 검증했습니다. broadcast 실패의 DLT 적재 end-to-end 검증은 별도 개선 범위입니다. |
+| Presence | heartbeat는 클라이언트가 TTL보다 짧은 주기로 `/app/presence.heartbeat`를 보내야 유지됩니다. TTL 만료 이벤트 기반 운영형 감시는 별도 과제입니다. |
+| REST 부하 테스트 | 기존 측정값은 조회 중심입니다. 메시지 전송이 섞인 mixed traffic 성능 결과는 아직 없습니다. |
+| WebSocket 성능 | 현재 공개 수치는 연결 안정성과 제한된 smoke 테스트입니다. delivery completeness나 send-to-receive p95 결과가 아닙니다. |
+| Cache | 메시지 저장은 selective eviction이지만, 방 생성/참여는 아직 일부 넓은 무효화 정책이 남아 있습니다. |
+
+---
 
 ## 문서
 
-- [docs/DESIGN.md](docs/DESIGN.md): 아키텍처, Kafka, WebSocket, DLT, cache, 한계
-- [docs/PERF_RESULT.md](docs/PERF_RESULT.md): 채팅방 조회 API 최적화와 k6 측정 결과
-- [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md): 코드 흐름 학습 가이드
+| 문서 | 내용 |
+|---|---|
+| [`docs/DESIGN.md`](docs/DESIGN.md) | 아키텍처, Kafka, WebSocket, DLT, read receipt, presence, cache 설계 |
+| [`docs/PERF_RESULT.md`](docs/PERF_RESULT.md) | REST 조회 API 최적화와 k6 측정 결과 |
+| [`docs/STUDY_GUIDE.md`](docs/STUDY_GUIDE.md) | 코드 흐름 학습 가이드 |

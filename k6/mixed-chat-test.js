@@ -114,12 +114,16 @@ export default function (data) {
     recordHttpCheck(historyRes, 'message history ok', (r) => r.status === 200);
 
     const history = historyRes.status === 200 ? safeJson(historyRes) : {};
-    const latestMessageId = latestMessageIdFrom(history);
+    let latestMessageId = latestMessageIdFrom(history);
 
     const wsResult = runWebSocketFlow(user.token, roomId);
     check(wsResult, {
         'websocket upgraded': (r) => r && r.status === 101,
     });
+
+    if (latestMessageId <= 0) {
+        latestMessageId = fetchLatestMessageId(roomId, headers);
+    }
 
     if (latestMessageId > 0) {
         const readPayload = JSON.stringify({ lastReadMessageId: latestMessageId });
@@ -129,6 +133,17 @@ export default function (data) {
     }
 
     sleep(1);
+}
+
+function fetchLatestMessageId(roomId, headers) {
+    const historyRes = http.get(`${BASE_URL}/api/rooms/${roomId}/messages?size=20`, { headers });
+    recordHttpCheck(historyRes, 'message history after send ok', (r) => r.status === 200);
+
+    if (historyRes.status !== 200) {
+        return 0;
+    }
+
+    return latestMessageIdFrom(safeJson(historyRes));
 }
 
 function runWebSocketFlow(token, roomId) {
