@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc">
+  <title id="title">Realtime Chat message flow</title>
+  <desc id="desc">A message starts with STOMP connect and subscribe, is sent to Kafka with an ACK or NACK response to the sender, then consumers persist and broadcast it. Failed consumer records can move to DLT for manual replay.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#1e293b"/>
+    </marker>
+    <style>
+      .bg { fill: #ffffff; }
+      .step { fill: #f8fafc; stroke: #334155; stroke-width: 1.4; rx: 16; }
+      .decision { fill: #fff7ed; stroke: #ea580c; stroke-width: 1.4; rx: 16; }
+      .success { fill: #ecfdf5; stroke: #16a34a; stroke-width: 1.4; rx: 16; }
+      .failure { fill: #fef2f2; stroke: #dc2626; stroke-width: 1.4; rx: 16; }
+      .title { fill: #0f172a; font-family: Inter, Arial, sans-serif; font-size: 24px; font-weight: 800; }
+      .label { fill: #0f172a; font-family: Inter, Arial, sans-serif; font-size: 16px; font-weight: 750; }
+      .small { fill: #334155; font-family: Inter, Arial, sans-serif; font-size: 13px; }
+      .note { fill: #475569; font-family: Inter, Arial, sans-serif; font-size: 12px; }
+      .num { fill: #ffffff; font-family: Inter, Arial, sans-serif; font-size: 14px; font-weight: 800; }
+      .circle { fill: #2563eb; }
+      .arrow { fill: none; stroke: #1e293b; stroke-width: 1.8; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 6 6; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="540"/>
+  <text class="title" x="44" y="46">Message Flow</text>
+  <text class="small" x="44" y="72">ACK/NACK is scoped to Kafka publish accepted or failed. Persistence, broadcast, and recipient delivery happen later.</text>
+
+  <rect class="step" x="44" y="128" width="150" height="104"/>
+  <circle class="circle" cx="72" cy="156" r="16"/>
+  <text class="num" x="68" y="161">1</text>
+  <text class="label" x="92" y="154">CONNECT</text>
+  <text class="small" x="66" y="184">/ws</text>
+  <text class="small" x="66" y="205">JWT auth</text>
+
+  <rect class="step" x="236" y="128" width="158" height="104"/>
+  <circle class="circle" cx="264" cy="156" r="16"/>
+  <text class="num" x="260" y="161">2</text>
+  <text class="label" x="284" y="154">SUBSCRIBE</text>
+  <text class="small" x="258" y="184">room topic</text>
+  <text class="small" x="258" y="205">member authz</text>
+
+  <rect class="step" x="436" y="128" width="150" height="104"/>
+  <circle class="circle" cx="464" cy="156" r="16"/>
+  <text class="num" x="460" y="161">3</text>
+  <text class="label" x="484" y="154">SEND</text>
+  <text class="small" x="458" y="184">/app/chat.send</text>
+  <text class="small" x="458" y="205">member check</text>
+
+  <rect class="decision" x="628" y="128" width="158" height="104"/>
+  <circle class="circle" cx="656" cy="156" r="16"/>
+  <text class="num" x="652" y="161">4</text>
+  <text class="label" x="676" y="154">Kafka publish</text>
+  <text class="small" x="650" y="184">chat.messages</text>
+  <text class="small" x="650" y="205">key = roomId</text>
+
+  <rect class="step" x="828" y="128" width="158" height="104"/>
+  <circle class="circle" cx="856" cy="156" r="16"/>
+  <text class="num" x="852" y="161">5</text>
+  <text class="label" x="876" y="154">Consumers</text>
+  <text class="small" x="850" y="184">persistence</text>
+  <text class="small" x="850" y="205">broadcast</text>
+
+  <rect class="success" x="1028" y="128" width="128" height="104"/>
+  <circle class="circle" cx="1056" cy="156" r="16"/>
+  <text class="num" x="1052" y="161">6</text>
+  <text class="label" x="1076" y="154">Deliver</text>
+  <text class="small" x="1050" y="184">DB save</text>
+  <text class="small" x="1050" y="205">Redis broadcast</text>
+
+  <path class="arrow" d="M194 180 H236"/>
+  <path class="arrow" d="M394 180 H436"/>
+  <path class="arrow" d="M586 180 H628"/>
+  <path class="arrow" d="M786 180 H828"/>
+  <path class="arrow" d="M986 180 H1028"/>
+
+  <rect class="success" x="628" y="294" width="158" height="80"/>
+  <text class="label" x="650" y="325">ACK to sender</text>
+  <text class="small" x="650" y="350">Kafka accepted</text>
+
+  <rect class="failure" x="628" y="408" width="158" height="80"/>
+  <text class="label" x="650" y="439">NACK to sender</text>
+  <text class="small" x="650" y="464">Kafka failed</text>
+
+  <path class="arrow" d="M707 232 V294"/>
+  <path class="arrow" d="M707 232 C750 274 750 365 707 408"/>
+
+  <rect class="success" x="846" y="294" width="132" height="80"/>
+  <text class="label" x="874" y="325">PostgreSQL</text>
+  <text class="small" x="884" y="350">messages</text>
+
+  <rect class="success" x="1024" y="294" width="132" height="80"/>
+  <text class="label" x="1055" y="325">Redis</text>
+  <text class="small" x="1050" y="350">Pub/Sub</text>
+
+  <path class="arrow" d="M884 232 V294"/>
+  <path class="arrow" d="M940 232 C1010 244 1064 256 1090 294"/>
+  <path class="arrow" d="M1090 374 C1020 438 842 438 786 334"/>
+
+  <rect class="failure" x="846" y="408" width="132" height="80"/>
+  <text class="label" x="896" y="439">DLT</text>
+  <text class="small" x="869" y="464">manual replay</text>
+  <path class="arrow dashed" d="M912 232 V408"/>
+  <path class="arrow dashed" d="M978 448 C1066 448 1098 354 986 200"/>
+
+  <text class="note" x="44" y="506">Room topic path, user ACK/NACK queues, and detailed API examples are documented below in README and docs/DESIGN.md.</text>
+</svg>
