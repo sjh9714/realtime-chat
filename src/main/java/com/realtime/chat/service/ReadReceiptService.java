@@ -2,6 +2,7 @@ package com.realtime.chat.service;
 
 import com.realtime.chat.common.BusinessException;
 import com.realtime.chat.domain.ChatRoomMember;
+import com.realtime.chat.domain.Message;
 import com.realtime.chat.event.ReadReceiptEvent;
 import com.realtime.chat.producer.ChatMessageProducer;
 import com.realtime.chat.repository.ChatRoomMemberRepository;
@@ -29,8 +30,22 @@ public class ReadReceiptService {
 
   // 읽음 처리 요청 → Kafka로 발행
   public void markAsRead(Long userId, Long roomId, Long lastReadMessageId) {
-    if (!chatRoomMemberRepository.existsByChatRoomIdAndUserId(roomId, userId)) {
-      throw new BusinessException(HttpStatus.FORBIDDEN, "채팅방에 참여하지 않은 사용자입니다.");
+    ChatRoomMember member =
+        chatRoomMemberRepository
+            .findByChatRoomIdAndUserId(roomId, userId)
+            .orElseThrow(() -> new BusinessException(HttpStatus.FORBIDDEN, "채팅방에 참여하지 않은 사용자입니다."));
+
+    if (lastReadMessageId == null) {
+      throw new BusinessException(HttpStatus.BAD_REQUEST, "마지막으로 읽은 메시지 ID는 필수입니다.");
+    }
+
+    Message lastReadMessage =
+        messageRepository
+            .findByIdAndChatRoomId(lastReadMessageId, roomId)
+            .orElseThrow(() -> new BusinessException(HttpStatus.BAD_REQUEST, "해당 채팅방의 메시지가 아닙니다."));
+
+    if (lastReadMessage.getCreatedAt().isBefore(member.getJoinedAt())) {
+      throw new BusinessException(HttpStatus.BAD_REQUEST, "참여 이전 메시지는 읽음 기준으로 사용할 수 없습니다.");
     }
 
     ReadReceiptEvent event = ReadReceiptEvent.of(roomId, userId, lastReadMessageId);

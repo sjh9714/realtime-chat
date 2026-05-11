@@ -7,7 +7,7 @@
 - STOMP 연결 인증과 채팅방 구독 인가
 - Kafka publish ACK/NACK와 consumer 비동기 처리 분리
 - `roomId` key 기반 partition ordering
-- consumer 실패 메시지 DLT 격리와 manual replay utility
+- persistence consumer 실패 메시지 DLT 격리와 manual replay utility
 - 읽음 처리 정합성
 - WebSocket session 단위 presence
 - Cache Aside 무효화 범위 최소화
@@ -109,7 +109,7 @@ ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻이다. PostgreSQ
 
 ## DLT Replay
 
-Kafka consumer는 manual ack와 `DefaultErrorHandler`, `DeadLetterPublishingRecoverer`를 사용한다. 재시도 후에도 처리에 실패한 메시지는 DLT로 이동한다.
+Kafka consumer는 manual ack와 `DefaultErrorHandler`, `DeadLetterPublishingRecoverer`를 사용한다. persistence consumer 실패는 통합 테스트에서 DLT 격리와 manual replay를 검증한다.
 
 `DltReplayService`는 `chat.messages.dlt`에 격리된 `ChatMessageEvent`를 원래 `chat.messages` topic으로 재발행하는 manual replay utility다. 운영용 자동 복구 시스템이 아니라 원인 제거 후 수동으로 호출하는 내부 service utility다.
 
@@ -120,9 +120,13 @@ Kafka consumer는 manual ack와 `DefaultErrorHandler`, `DeadLetterPublishingReco
 
 운영 환경에서는 replay 권한 제어, 감사 로그, replay 대상 필터링, 재처리 결과 추적이 추가로 필요하다.
 
+Redis Pub/Sub broadcast 실패는 `RedisPubSubService.publish(ChatMessageEvent)`에서 예외를 재전파해 Kafka ack 전에 consumer 실패로 처리되도록 한다. 현재 테스트는 publish 실패 재전파와 broadcast consumer의 no-ack 동작을 단위 테스트로 검증하며, broadcast 실패 DLT 적재 end-to-end 검증은 별도 개선 범위다.
+
 ## 읽음 처리
 
 읽음 처리는 `lastReadMessageId`를 기준으로 member row를 갱신하고 unread count를 재계산한다.
+
+읽음 처리 요청 시 `lastReadMessageId`가 해당 room의 메시지인지 확인하고, 사용자가 참여하기 전에 생성된 메시지는 읽음 기준으로 거부한다.
 
 unread count 계산 기준:
 
