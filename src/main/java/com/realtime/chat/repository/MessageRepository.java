@@ -3,6 +3,7 @@ package com.realtime.chat.repository;
 import com.realtime.chat.domain.Message;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -17,7 +18,15 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
   long countByMessageKey(UUID messageKey);
 
   // messageKey로 메시지 조회
-  java.util.Optional<Message> findByMessageKey(UUID messageKey);
+  Optional<Message> findByMessageKey(UUID messageKey);
+
+  // 읽음 처리 검증: 해당 room의 메시지인지 확인
+  @Query(
+      """
+      SELECT m FROM Message m
+      WHERE m.id = :id AND m.chatRoom.id = :roomId
+      """)
+  Optional<Message> findByIdAndChatRoomId(@Param("id") Long id, @Param("roomId") Long roomId);
 
   // 커서 기반 페이지네이션: cursor보다 작은 id의 메시지를 size+1개 조회 (hasMore 판단)
   @Query(
