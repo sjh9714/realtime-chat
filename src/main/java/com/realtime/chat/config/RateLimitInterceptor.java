@@ -1,11 +1,12 @@
 package com.realtime.chat.config;
 
 import java.security.Principal;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
+import java.time.Clock;
+import java.time.Duration;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -19,14 +20,25 @@ import org.springframework.stereotype.Component;
 @Component
 public class RateLimitInterceptor implements ChannelInterceptor {
 
-  private final int messagesPerSecond;
+  private static final String RATE_LIMIT_KEY_PREFIX = "rate:ws:send:user:";
+  private static final Duration WINDOW_TTL = Duration.ofSeconds(2);
 
-  // 유저별 카운터: userId → (카운트, 윈도우 시작 시각)
-  private final ConcurrentHashMap<Long, RateWindow> rateLimitMap = new ConcurrentHashMap<>();
+  private final StringRedisTemplate redisTemplate;
+  private final int messagesPerSecond;
+  private final Clock clock;
+
+  @Autowired
+  public RateLimitInterceptor(
+      StringRedisTemplate redisTemplate,
+      @Value("${chat.rate-limit.messages-per-second:10}") int messagesPerSecond) {
+    this(redisTemplate, messagesPerSecond, Clock.systemUTC());
+  }
 
   public RateLimitInterceptor(
-      @Value("${chat.rate-limit.messages-per-second:10}") int messagesPerSecond) {
+      StringRedisTemplate redisTemplate, int messagesPerSecond, Clock clock) {
+    this.redisTemplate = redisTemplate;
     this.messagesPerSecond = messagesPerSecond;
+    this.clock = clock;
   }
 
   @Override
@@ -44,9 +56,8 @@ public class RateLimitInterceptor implements ChannelInterceptor {
     }
 
     Long userId = Long.parseLong(user.getName());
-    RateWindow window = rateLimitMap.computeIfAbsent(userId, k -> new RateWindow());
-
-    if (!window.tryAcquire(messagesPerSecond)) {
+    long count = incrementRedisWindow(userId);
+    if (count > messagesPerSecond) {
       log.warn("Rate limit 초과: userId={}, limit={}/sec", userId, messagesPerSecond);
       throw new IllegalStateException("메시지 전송 속도 제한을 초과했습니다.");
     }
@@ -54,23 +65,27 @@ public class RateLimitInterceptor implements ChannelInterceptor {
     return message;
   }
 
-  // 1초 윈도우 기반 카운터
-  private static class RateWindow {
-    private final AtomicLong windowStart = new AtomicLong(System.currentTimeMillis());
-    private final AtomicInteger count = new AtomicInteger(0);
-
-    boolean tryAcquire(int limit) {
-      long now = System.currentTimeMillis();
-      long start = windowStart.get();
-
-      // 1초 경과 시 윈도우 리셋
-      if (now - start >= 1000) {
-        windowStart.set(now);
-        count.set(1);
-        return true;
+  private long incrementRedisWindow(Long userId) {
+    String key = rateLimitKey(userId);
+    try {
+      Long count = redisTemplate.opsForValue().increment(key);
+      if (count == null) {
+        throw new IllegalStateException("Redis rate limit increment returned null");
       }
-
-      return count.incrementAndGet() <= limit;
+      if (count == 1L) {
+        Boolean ttlSet = redisTemplate.expire(key, WINDOW_TTL);
+        if (!Boolean.TRUE.equals(ttlSet)) {
+          throw new IllegalStateException("Redis rate limit TTL was not set");
+        }
+      }
+      return count;
+    } catch (Exception e) {
+      log.warn("Redis rate limit 체크 실패: userId={}", userId, e);
+      throw new IllegalStateException("메시지 전송 속도 제한을 초과했습니다.", e);
     }
+  }
+
+  private String rateLimitKey(Long userId) {
+    return RATE_LIMIT_KEY_PREFIX + userId + ":" + clock.instant().getEpochSecond();
   }
 }
