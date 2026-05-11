@@ -8,7 +8,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "messages")
+@Table(
+    name = "messages",
+    uniqueConstraints =
+        @UniqueConstraint(
+            name = "uk_messages_sender_client_message",
+            columnNames = {"sender_id", "client_message_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Message {
@@ -19,6 +24,9 @@ public class Message {
 
   @Column(nullable = false, unique = true)
   private UUID messageKey;
+
+  @Column(name = "client_message_id", nullable = false)
+  private UUID clientMessageId;
 
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "room_id", nullable = false)
@@ -44,7 +52,18 @@ public class Message {
 
   public Message(
       UUID messageKey, ChatRoom chatRoom, User sender, String content, MessageType type) {
+    this(messageKey, UUID.randomUUID(), chatRoom, sender, content, type);
+  }
+
+  public Message(
+      UUID messageKey,
+      UUID clientMessageId,
+      ChatRoom chatRoom,
+      User sender,
+      String content,
+      MessageType type) {
     this.messageKey = messageKey;
+    this.clientMessageId = clientMessageId != null ? clientMessageId : UUID.randomUUID();
     this.chatRoom = chatRoom;
     this.sender = sender;
     this.content = content;

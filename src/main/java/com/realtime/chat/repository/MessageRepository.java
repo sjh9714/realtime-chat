@@ -14,8 +14,14 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
   // 멱등성 체크: 동일 messageKey 존재 여부
   boolean existsByMessageKey(UUID messageKey);
 
+  // 클라이언트 재시도 멱등성 체크: 동일 sender/clientMessageId 존재 여부
+  boolean existsBySenderIdAndClientMessageId(Long senderId, UUID clientMessageId);
+
   // 멱등성 테스트: messageKey로 카운트
   long countByMessageKey(UUID messageKey);
+
+  // 클라이언트 재시도 멱등성 테스트: sender/clientMessageId로 카운트
+  long countBySenderIdAndClientMessageId(Long senderId, UUID clientMessageId);
 
   // messageKey로 메시지 조회
   Optional<Message> findByMessageKey(UUID messageKey);

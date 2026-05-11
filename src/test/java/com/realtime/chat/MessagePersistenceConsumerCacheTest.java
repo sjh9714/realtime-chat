@@ -4,6 +4,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.realtime.chat.config.KafkaConfig;
 import com.realtime.chat.consumer.MessagePersistenceConsumer;
@@ -31,6 +32,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.support.Acknowledgment;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,15 +64,25 @@ class MessagePersistenceConsumerCacheTest {
     MessagePersistenceConsumer consumer = consumer();
     User sender = new User("sender@test.com", "encoded", "보낸사람");
     ChatRoom room = new ChatRoom(null, RoomType.DIRECT, sender);
+    UUID clientMessageId = UUID.randomUUID();
     ChatMessageEvent event =
         new ChatMessageEvent(
-            UUID.randomUUID(), 20L, 10L, "보낸사람", "안녕하세요", MessageType.TEXT, LocalDateTime.now());
+            UUID.randomUUID(),
+            20L,
+            10L,
+            "보낸사람",
+            "안녕하세요",
+            MessageType.TEXT,
+            clientMessageId,
+            LocalDateTime.now());
     ConsumerRecord<String, ChatMessageEvent> record =
         new ConsumerRecord<>(KafkaConfig.MESSAGES_TOPIC, 0, 0L, "20", event);
     given(messageRepository.existsByMessageKey(event.getMessageKey())).willReturn(false);
+    given(messageRepository.existsBySenderIdAndClientMessageId(10L, clientMessageId))
+        .willReturn(false);
     given(chatRoomRepository.findById(20L)).willReturn(Optional.of(room));
     given(userRepository.findById(10L)).willReturn(Optional.of(sender));
-    given(messageRepository.save(any(Message.class)))
+    given(messageRepository.saveAndFlush(any(Message.class)))
         .willAnswer(invocation -> invocation.getArgument(0));
     given(chatRoomMemberRepository.findUserIdsByRoomId(20L)).willReturn(List.of(10L, 11L));
     given(cacheManager.getCache("rooms")).willReturn(roomsCache);
@@ -82,6 +94,84 @@ class MessagePersistenceConsumerCacheTest {
     verify(roomsCache, never()).evict(99L);
     verify(roomsCache, never()).clear();
     verify(acknowledgment).acknowledge();
+  }
+
+  @Test
+  @DisplayName("동일 messageKey 중복 메시지는 저장과 부수 효과 없이 acknowledge한다")
+  void duplicateMessageKeyAcknowledgesWithoutSideEffects() {
+    MessagePersistenceConsumer consumer = consumer();
+    ChatMessageEvent event = event(UUID.randomUUID(), UUID.randomUUID());
+    ConsumerRecord<String, ChatMessageEvent> record =
+        new ConsumerRecord<>(KafkaConfig.MESSAGES_TOPIC, 0, 0L, "20", event);
+    given(messageRepository.existsByMessageKey(event.getMessageKey())).willReturn(true);
+
+    consumer.consume(record, acknowledgment);
+
+    verify(acknowledgment).acknowledge();
+    verify(messageRepository, never()).saveAndFlush(any(Message.class));
+    verifyNoInteractions(chatRoomRepository, userRepository, chatRoomMemberRepository, cacheManager);
+    verify(messagesPersistedCounter, never()).increment();
+    verify(messagesFailedCounter, never()).increment();
+  }
+
+  @Test
+  @DisplayName("동일 senderId/clientMessageId 중복 메시지는 저장과 부수 효과 없이 acknowledge한다")
+  void duplicateClientMessageIdAcknowledgesWithoutSideEffects() {
+    MessagePersistenceConsumer consumer = consumer();
+    UUID clientMessageId = UUID.randomUUID();
+    ChatMessageEvent event = event(UUID.randomUUID(), clientMessageId);
+    ConsumerRecord<String, ChatMessageEvent> record =
+        new ConsumerRecord<>(KafkaConfig.MESSAGES_TOPIC, 0, 0L, "20", event);
+    given(messageRepository.existsByMessageKey(event.getMessageKey())).willReturn(false);
+    given(messageRepository.existsBySenderIdAndClientMessageId(10L, clientMessageId))
+        .willReturn(true);
+
+    consumer.consume(record, acknowledgment);
+
+    verify(acknowledgment).acknowledge();
+    verify(messageRepository, never()).saveAndFlush(any(Message.class));
+    verifyNoInteractions(chatRoomRepository, userRepository, chatRoomMemberRepository, cacheManager);
+    verify(messagesPersistedCounter, never()).increment();
+    verify(messagesFailedCounter, never()).increment();
+  }
+
+  @Test
+  @DisplayName("saveAndFlush 중 unique 충돌 후 중복 키가 확인되면 idempotent duplicate로 acknowledge한다")
+  void dataIntegrityViolationAcknowledgesWhenDuplicateAppearsAfterFlush() {
+    MessagePersistenceConsumer consumer = consumer();
+    User sender = new User("sender@test.com", "encoded", "보낸사람");
+    ChatRoom room = new ChatRoom(null, RoomType.DIRECT, sender);
+    UUID clientMessageId = UUID.randomUUID();
+    ChatMessageEvent event = event(UUID.randomUUID(), clientMessageId);
+    ConsumerRecord<String, ChatMessageEvent> record =
+        new ConsumerRecord<>(KafkaConfig.MESSAGES_TOPIC, 0, 0L, "20", event);
+    given(messageRepository.existsByMessageKey(event.getMessageKey())).willReturn(false, false);
+    given(messageRepository.existsBySenderIdAndClientMessageId(10L, clientMessageId))
+        .willReturn(false, true);
+    given(chatRoomRepository.findById(20L)).willReturn(Optional.of(room));
+    given(userRepository.findById(10L)).willReturn(Optional.of(sender));
+    given(messageRepository.saveAndFlush(any(Message.class)))
+        .willThrow(new DataIntegrityViolationException("duplicate client message"));
+
+    consumer.consume(record, acknowledgment);
+
+    verify(acknowledgment).acknowledge();
+    verify(chatRoomMemberRepository, never()).incrementUnreadCountForOtherMembers(any(), any());
+    verify(cacheManager, never()).getCache("rooms");
+    verify(messagesPersistedCounter, never()).increment();
+    verify(messagesFailedCounter, never()).increment();
+  }
+
+  private ChatMessageEvent event(UUID messageKey, UUID clientMessageId) {
+    return new ChatMessageEvent(
+        messageKey,
+        20L,
+        10L,
+        "보낸사람",
+        "안녕하세요",
+        MessageType.TEXT,
+        clientMessageId,
+        LocalDateTime.now());
   }
 
   private MessagePersistenceConsumer consumer() {

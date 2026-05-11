@@ -53,11 +53,15 @@ class ChatMessageControllerTest {
     UUID clientMessageId = UUID.randomUUID();
     ChatMessageController controller = controller();
     SendMessageRequest request = sendRequest(20L, "안녕하세요", clientMessageId);
+    ArgumentCaptor<ChatMessageEvent> eventCaptor = ArgumentCaptor.forClass(ChatMessageEvent.class);
     givenMemberAndSender();
     given(chatMessageProducer.sendMessage(any(ChatMessageEvent.class)))
         .willReturn(CompletableFuture.completedFuture(sendResult()));
 
     controller.sendMessage(request, principal("10"));
+
+    verify(chatMessageProducer).sendMessage(eventCaptor.capture());
+    assertThat(eventCaptor.getValue().getClientMessageId()).isEqualTo(clientMessageId);
 
     ArgumentCaptor<MessagePublishAckResponse> captor =
         ArgumentCaptor.forClass(MessagePublishAckResponse.class);
@@ -101,17 +105,21 @@ class ChatMessageControllerTest {
   void generateClientMessageIdWhenMissing() {
     ChatMessageController controller = controller();
     SendMessageRequest request = sendRequest(20L, "안녕하세요", null);
+    ArgumentCaptor<ChatMessageEvent> eventCaptor = ArgumentCaptor.forClass(ChatMessageEvent.class);
     givenMemberAndSender();
     given(chatMessageProducer.sendMessage(any(ChatMessageEvent.class)))
         .willReturn(CompletableFuture.completedFuture(sendResult()));
 
     controller.sendMessage(request, principal("10"));
 
+    verify(chatMessageProducer).sendMessage(eventCaptor.capture());
     ArgumentCaptor<MessagePublishAckResponse> captor =
         ArgumentCaptor.forClass(MessagePublishAckResponse.class);
     verify(messagingTemplate)
         .convertAndSendToUser(eq("10"), eq("/queue/messages/ack"), captor.capture());
     assertThat(captor.getValue().getClientMessageId()).isNotNull();
+    assertThat(eventCaptor.getValue().getClientMessageId())
+        .isEqualTo(captor.getValue().getClientMessageId());
   }
 
   private ChatMessageController controller() {

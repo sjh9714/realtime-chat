@@ -60,7 +60,8 @@ public class ChatMessageController {
             userId,
             sender.getNickname(),
             request.getContent(),
-            request.getType());
+            request.getType(),
+            clientMessageId);
 
     chatMessageProducer
         .sendMessage(event)
