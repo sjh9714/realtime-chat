@@ -43,17 +43,21 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 -- 메시지 조회 성능을 위한 복합 인덱스
-CREATE INDEX IF NOT EXISTS idx_messages_room_id_id ON messages(room_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_room_id_id
+    ON messages(room_id, id DESC);
 
 -- Kafka 파티션/오프셋 유니크 제약 (멱등성 보장)
-CREATE UNIQUE INDEX IF NOT EXISTS uk_messages_kafka ON messages(kafka_partition, kafka_offset)
+CREATE UNIQUE INDEX IF NOT EXISTS uk_messages_kafka
+    ON messages(kafka_partition, kafka_offset)
     WHERE kafka_partition IS NOT NULL AND kafka_offset IS NOT NULL;
 
 -- 채팅방 멤버 조회용 인덱스
-CREATE INDEX IF NOT EXISTS idx_chat_room_members_user_id ON chat_room_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_room_members_user_id
+    ON chat_room_members(user_id);
 
 -- 메시지 발신자 조회용 인덱스 (관리/검색 기능용)
-CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id
+    ON messages(sender_id);
 
 -- 인덱스 커버리지 분석:
 -- UNIQUE(room_id, user_id) → findByChatRoomIdAndUserId, existsByChatRoomIdAndUserId, incrementUnreadCountForOtherMembers, COUNT 서브쿼리

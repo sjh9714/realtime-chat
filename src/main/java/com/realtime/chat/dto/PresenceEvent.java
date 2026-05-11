@@ -10,15 +10,15 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PresenceEvent {
 
-    private Long userId;
-    private String status; // "ONLINE" or "OFFLINE"
-    private long timestamp;
+  private Long userId;
+  private String status; // "ONLINE" or "OFFLINE"
+  private long timestamp;
 
-    public static PresenceEvent online(Long userId) {
-        return new PresenceEvent(userId, "ONLINE", System.currentTimeMillis());
-    }
+  public static PresenceEvent online(Long userId) {
+    return new PresenceEvent(userId, "ONLINE", System.currentTimeMillis());
+  }
 
-    public static PresenceEvent offline(Long userId) {
-        return new PresenceEvent(userId, "OFFLINE", System.currentTimeMillis());
-    }
+  public static PresenceEvent offline(Long userId) {
+    return new PresenceEvent(userId, "OFFLINE", System.currentTimeMillis());
+  }
 }

@@ -15,39 +15,37 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 public abstract class BaseIntegrationTest {
 
-    static final PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
-                    .withDatabaseName("chat_test")
-                    .withUsername("test")
-                    .withPassword("test");
+  static final PostgreSQLContainer<?> postgres =
+      new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
+          .withDatabaseName("chat_test")
+          .withUsername("test")
+          .withPassword("test");
 
-    static final KafkaContainer kafka =
-            new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"))
-                    .withKraft();
+  static final KafkaContainer kafka =
+      new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0")).withKraft();
 
-    @SuppressWarnings("resource")
-    static final GenericContainer<?> redis =
-            new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-                    .withExposedPorts(6379);
+  @SuppressWarnings("resource")
+  static final GenericContainer<?> redis =
+      new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
-    static {
-        postgres.start();
-        kafka.start();
-        redis.start();
-    }
+  static {
+    postgres.start();
+    kafka.start();
+    redis.start();
+  }
 
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        // PostgreSQL
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
+  @DynamicPropertySource
+  static void configureProperties(DynamicPropertyRegistry registry) {
+    // PostgreSQL
+    registry.add("spring.datasource.url", postgres::getJdbcUrl);
+    registry.add("spring.datasource.username", postgres::getUsername);
+    registry.add("spring.datasource.password", postgres::getPassword);
 
-        // Kafka
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+    // Kafka
+    registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
 
-        // Redis
-        registry.add("spring.data.redis.host", redis::getHost);
-        registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
-    }
+    // Redis
+    registry.add("spring.data.redis.host", redis::getHost);
+    registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+  }
 }
