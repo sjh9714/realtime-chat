@@ -23,6 +23,42 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Check whitespace
+        run: git diff --check
+
+      - name: Check source line layout
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          targets = (
+              list(Path("src").rglob("*.java"))
+              + list(Path(".github").rglob("*.yml"))
+              + list(Path(".github").rglob("*.yaml"))
+              + list(Path("k6").rglob("*.js"))
+          )
+
+          bad = []
+          for path in targets:
+              lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+              if len(lines) <= 3:
+                  bad.append((str(path), len(lines)))
+
+          if bad:
+              print("Too-short source files:")
+              for row in bad:
+                  print(row)
+              raise SystemExit(1)
+
+          print(f"OK: checked {len(targets)} files")
+          PY
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Inspect mixed k6 scenario
+        run: k6 inspect k6/mixed-chat-test.js
+
       - name: Run tests
         run: ./gradlew test
 
