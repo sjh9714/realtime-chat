@@ -17,37 +17,40 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtTokenProvider jwtTokenProvider;
+  private final UserRepository userRepository;
+  private final PasswordEncoder passwordEncoder;
+  private final JwtTokenProvider jwtTokenProvider;
 
-    @Transactional
-    public AuthResponse signup(SignupRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다.");
-        }
-
-        User user = new User(
-                request.getEmail(),
-                passwordEncoder.encode(request.getPassword()),
-                request.getNickname()
-        );
-        userRepository.save(user);
-
-        String token = jwtTokenProvider.createToken(user.getId(), user.getEmail());
-        return new AuthResponse(token, user.getId(), user.getEmail(), user.getNickname());
+  @Transactional
+  public AuthResponse signup(SignupRequest request) {
+    if (userRepository.existsByEmail(request.getEmail())) {
+      throw new BusinessException(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다.");
     }
 
-    @Transactional(readOnly = true)
-    public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new BusinessException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."));
+    User user =
+        new User(
+            request.getEmail(),
+            passwordEncoder.encode(request.getPassword()),
+            request.getNickname());
+    userRepository.save(user);
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BusinessException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.");
-        }
+    String token = jwtTokenProvider.createToken(user.getId(), user.getEmail());
+    return new AuthResponse(token, user.getId(), user.getEmail(), user.getNickname());
+  }
 
-        String token = jwtTokenProvider.createToken(user.getId(), user.getEmail());
-        return new AuthResponse(token, user.getId(), user.getEmail(), user.getNickname());
+  @Transactional(readOnly = true)
+  public AuthResponse login(LoginRequest request) {
+    User user =
+        userRepository
+            .findByEmail(request.getEmail())
+            .orElseThrow(
+                () -> new BusinessException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."));
+
+    if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+      throw new BusinessException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.");
     }
+
+    String token = jwtTokenProvider.createToken(user.getId(), user.getEmail());
+    return new AuthResponse(token, user.getId(), user.getEmail(), user.getNickname());
+  }
 }

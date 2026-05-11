@@ -16,23 +16,26 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MessageBroadcastConsumer {
 
-    private final RedisPubSubService redisPubSubService;
+  private final RedisPubSubService redisPubSubService;
 
-    @KafkaListener(
-            topics = KafkaConfig.MESSAGES_TOPIC,
-            containerFactory = "broadcastListenerFactory"
-    )
-    public void consume(ConsumerRecord<String, ChatMessageEvent> record, Acknowledgment ack) {
-        ChatMessageEvent event = record.value();
-        log.debug("메시지 수신 (broadcast): messageKey={}, roomId={}", event.getMessageKey(), event.getRoomId());
+  @KafkaListener(topics = KafkaConfig.MESSAGES_TOPIC, containerFactory = "broadcastListenerFactory")
+  public void consume(ConsumerRecord<String, ChatMessageEvent> record, Acknowledgment ack) {
+    ChatMessageEvent event = record.value();
+    log.debug(
+        "메시지 수신 (broadcast): messageKey={}, roomId={}", event.getMessageKey(), event.getRoomId());
 
-        try {
-            redisPubSubService.publish(event);
-            ack.acknowledge();
-        } catch (Exception e) {
-            log.error("브로드캐스트 실패: messageKey={}, topic={}, partition={}, offset={}",
-                    event.getMessageKey(), record.topic(), record.partition(), record.offset(), e);
-            throw e;
-        }
+    try {
+      redisPubSubService.publish(event);
+      ack.acknowledge();
+    } catch (Exception e) {
+      log.error(
+          "브로드캐스트 실패: messageKey={}, topic={}, partition={}, offset={}",
+          event.getMessageKey(),
+          record.topic(),
+          record.partition(),
+          record.offset(),
+          e);
+      throw e;
     }
+  }
 }

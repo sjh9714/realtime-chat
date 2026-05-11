@@ -8,7 +8,7 @@ import org.springframework.cache.annotation.EnableCaching;
 @EnableCaching
 public class ChatApplication {
 
-    public static void main(String[] args) {
-        SpringApplication.run(ChatApplication.class, args);
-    }
+  public static void main(String[] args) {
+    SpringApplication.run(ChatApplication.class, args);
+  }
 }

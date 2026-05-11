@@ -16,23 +16,28 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ReadReceiptConsumer {
 
-    private final ReadReceiptService readReceiptService;
+  private final ReadReceiptService readReceiptService;
 
-    @KafkaListener(
-            topics = KafkaConfig.READ_RECEIPTS_TOPIC,
-            containerFactory = "readReceiptListenerFactory"
-    )
-    public void consume(ConsumerRecord<String, ReadReceiptEvent> record, Acknowledgment ack) {
-        ReadReceiptEvent event = record.value();
-        log.debug("읽음 처리 수신: roomId={}, userId={}", event.getRoomId(), event.getUserId());
+  @KafkaListener(
+      topics = KafkaConfig.READ_RECEIPTS_TOPIC,
+      containerFactory = "readReceiptListenerFactory")
+  public void consume(ConsumerRecord<String, ReadReceiptEvent> record, Acknowledgment ack) {
+    ReadReceiptEvent event = record.value();
+    log.debug("읽음 처리 수신: roomId={}, userId={}", event.getRoomId(), event.getUserId());
 
-        try {
-            readReceiptService.processReadReceipt(event);
-            ack.acknowledge();
-        } catch (Exception e) {
-            log.error("읽음 처리 실패: roomId={}, userId={}, topic={}, partition={}, offset={}",
-                    event.getRoomId(), event.getUserId(), record.topic(), record.partition(), record.offset(), e);
-            throw e;
-        }
+    try {
+      readReceiptService.processReadReceipt(event);
+      ack.acknowledge();
+    } catch (Exception e) {
+      log.error(
+          "읽음 처리 실패: roomId={}, userId={}, topic={}, partition={}, offset={}",
+          event.getRoomId(),
+          event.getUserId(),
+          record.topic(),
+          record.partition(),
+          record.offset(),
+          e);
+      throw e;
     }
+  }
 }

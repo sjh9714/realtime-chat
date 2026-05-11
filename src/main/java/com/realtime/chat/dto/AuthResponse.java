@@ -7,8 +7,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public class AuthResponse {
 
-    private String token;
-    private Long userId;
-    private String email;
-    private String nickname;
+  private String token;
+  private Long userId;
+  private String email;
+  private String nickname;
 }

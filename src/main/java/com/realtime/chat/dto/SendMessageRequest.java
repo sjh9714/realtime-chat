@@ -3,22 +3,21 @@ package com.realtime.chat.dto;
 import com.realtime.chat.domain.MessageType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.util.UUID;
 
 @Getter
 @NoArgsConstructor
 public class SendMessageRequest {
 
-    private UUID clientMessageId;
+  private UUID clientMessageId;
 
-    @NotNull(message = "채팅방 ID는 필수입니다.")
-    private Long roomId;
+  @NotNull(message = "채팅방 ID는 필수입니다.")
+  private Long roomId;
 
-    @NotBlank(message = "메시지 내용은 필수입니다.")
-    private String content;
+  @NotBlank(message = "메시지 내용은 필수입니다.")
+  private String content;
 
-    private MessageType type = MessageType.TEXT;
+  private MessageType type = MessageType.TEXT;
 }
