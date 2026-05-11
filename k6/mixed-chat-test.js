@@ -121,10 +121,12 @@ export default function (data) {
         'websocket upgraded': (r) => r && r.status === 101,
     });
 
-    const readPayload = JSON.stringify({ lastReadMessageId: latestMessageId || 0 });
-    const readRes = http.post(`${BASE_URL}/api/rooms/${roomId}/read`, readPayload, { headers });
-    readReceiptApiLatency.add(readRes.timings.duration);
-    recordHttpCheck(readRes, 'read receipt ok', (r) => r.status === 200);
+    if (latestMessageId > 0) {
+        const readPayload = JSON.stringify({ lastReadMessageId: latestMessageId });
+        const readRes = http.post(`${BASE_URL}/api/rooms/${roomId}/read`, readPayload, { headers });
+        readReceiptApiLatency.add(readRes.timings.duration);
+        recordHttpCheck(readRes, 'read receipt ok', (r) => r.status === 200);
+    }
 
     sleep(1);
 }
