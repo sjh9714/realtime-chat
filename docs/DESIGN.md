@@ -53,6 +53,70 @@ Redis Pub/Sub
 
 메시지 저장과 브로드캐스트는 Kafka consumer group을 분리한다. 저장 consumer와 broadcast consumer는 같은 Kafka topic을 독립적으로 소비하며, 각 consumer group의 실패/지연은 별도로 관찰한다.
 
+README용 container diagram은 `docs/architecture.drawio`를 원본으로 관리하고, GitHub에서 바로 보이는 export 결과를 `docs/architecture.svg`로 둔다. 상세 흐름은 README가 아니라 아래 sequence diagram에서 분리해 설명한다.
+
+### Message Send Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant App as Spring Boot App
+    participant Kafka as Kafka chat.messages
+    participant UserQueue as User ACK/NACK Queue
+    participant Persist as Persistence Consumer
+    participant DB as PostgreSQL
+    participant Broadcast as Broadcast Consumer
+    participant Redis as Redis Pub/Sub
+    participant OtherApp as Other App Instances
+
+    Client->>App: CONNECT /ws with JWT
+    App-->>Client: STOMP connected
+    Client->>App: SUBSCRIBE room topic
+    App->>App: room membership check
+    Client->>App: SEND /app/chat.send
+    App->>Kafka: publish key=roomId
+    alt Kafka publish accepted
+        App-->>UserQueue: ACK accepted
+    else Kafka publish failed
+        App-->>UserQueue: NACK failed
+    end
+    Kafka-->>Persist: consume message
+    Persist->>DB: save message
+    Kafka-->>Broadcast: consume message
+    Broadcast->>Redis: publish room event
+    Redis-->>OtherApp: fan-out event
+    OtherApp-->>Client: WebSocket broadcast
+```
+
+ACK/NACK는 Kafka publish callback 기준이다. DB 저장 완료, Redis Pub/Sub broadcast 완료, recipient delivery 완료를 의미하지 않는다.
+
+### Failure / DLT Replay Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Kafka as Kafka chat.messages
+    participant Consumer as Persistence Consumer
+    participant DLT as chat.messages.dlt
+    participant Operator
+    participant Replay as DltReplayService
+    participant DB as PostgreSQL
+
+    Kafka-->>Consumer: deliver record
+    Consumer->>Consumer: processing fails
+    Consumer-->>Kafka: retry exhausted
+    Kafka-->>DLT: isolate failed record
+    Operator->>Operator: remove root cause
+    Operator->>Replay: manual replay request
+    Replay->>Kafka: republish original event
+    Kafka-->>Consumer: consume replayed record
+    Consumer->>DB: save if messageKey is new
+    Consumer-->>DB: skip duplicate replay by messageKey
+```
+
+DLT replay는 자동 복구가 아니라 원인 제거 후 수동으로 호출하는 내부 utility다. 운영 환경에서는 권한 제어, 감사 로그, replay 대상 필터링, 결과 추적이 추가로 필요하다.
+
 ## WebSocket 인증과 인가
 
 ### CONNECT 인증
