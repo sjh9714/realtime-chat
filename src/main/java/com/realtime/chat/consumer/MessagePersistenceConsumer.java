@@ -14,10 +14,12 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.cache.CacheManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
@@ -55,6 +57,14 @@ public class MessagePersistenceConsumer {
         ack.acknowledge();
         return;
       }
+      if (isDuplicateClientMessage(event)) {
+        log.info(
+            "중복 클라이언트 메시지 스킵: senderId={}, clientMessageId={}",
+            event.getSenderId(),
+            event.getClientMessageId());
+        ack.acknowledge();
+        return;
+      }
 
       ChatRoom room =
           chatRoomRepository
@@ -66,9 +76,28 @@ public class MessagePersistenceConsumer {
               .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
 
       Message message =
-          new Message(event.getMessageKey(), room, sender, event.getContent(), event.getType());
+          new Message(
+              event.getMessageKey(),
+              event.getClientMessageId(),
+              room,
+              sender,
+              event.getContent(),
+              event.getType());
       message.updateKafkaMetadata(record.partition(), record.offset());
-      messageRepository.save(message);
+      try {
+        messageRepository.saveAndFlush(message);
+      } catch (DataIntegrityViolationException e) {
+        if (isDuplicateMessage(event)) {
+          log.info(
+              "중복 메시지 unique 충돌 스킵: messageKey={}, senderId={}, clientMessageId={}",
+              event.getMessageKey(),
+              event.getSenderId(),
+              event.getClientMessageId());
+          ack.acknowledge();
+          return;
+        }
+        throw e;
+      }
 
       // 발신자를 제외한 멤버들의 unreadCount 증가 + 해당 방 멤버 캐시만 무효화
       chatRoomMemberRepository.incrementUnreadCountForOtherMembers(
@@ -101,5 +130,17 @@ public class MessagePersistenceConsumer {
           e);
       throw e; // ErrorHandler가 재시도 후 DLT로 보냄
     }
+  }
+
+  private boolean isDuplicateMessage(ChatMessageEvent event) {
+    return messageRepository.existsByMessageKey(event.getMessageKey())
+        || isDuplicateClientMessage(event);
+  }
+
+  private boolean isDuplicateClientMessage(ChatMessageEvent event) {
+    UUID clientMessageId = event.getClientMessageId();
+    return clientMessageId != null
+        && messageRepository.existsBySenderIdAndClientMessageId(
+            event.getSenderId(), clientMessageId);
   }
 }

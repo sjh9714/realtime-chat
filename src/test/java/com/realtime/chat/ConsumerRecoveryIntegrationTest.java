@@ -94,6 +94,87 @@ class ConsumerRecoveryIntegrationTest extends BaseIntegrationTest {
   }
 
   @Test
+  @DisplayName("동일 senderId/clientMessageId는 messageKey가 달라도 DB에 1건만 저장된다")
+  void duplicateClientMessageIdForSameSender_shouldSaveOnlyOnce() {
+    UUID clientMessageId = UUID.randomUUID();
+    ChatMessageEvent first =
+        new ChatMessageEvent(
+            UUID.randomUUID(),
+            room.getId(),
+            user1.getId(),
+            "유저1",
+            "client retry first",
+            MessageType.TEXT,
+            clientMessageId,
+            java.time.LocalDateTime.now());
+    ChatMessageEvent retry =
+        new ChatMessageEvent(
+            UUID.randomUUID(),
+            room.getId(),
+            user1.getId(),
+            "유저1",
+            "client retry second",
+            MessageType.TEXT,
+            clientMessageId,
+            java.time.LocalDateTime.now());
+
+    kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, String.valueOf(room.getId()), first);
+    kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, String.valueOf(room.getId()), retry);
+
+    await()
+        .atMost(10, TimeUnit.SECONDS)
+        .untilAsserted(
+            () ->
+                assertThat(
+                        messageRepository.countBySenderIdAndClientMessageId(
+                            user1.getId(), clientMessageId))
+                    .isEqualTo(1));
+  }
+
+  @Test
+  @DisplayName("동일 clientMessageId라도 senderId가 다르면 각각 저장된다")
+  void sameClientMessageIdFromDifferentSenders_shouldBothBeSaved() {
+    UUID clientMessageId = UUID.randomUUID();
+    ChatMessageEvent fromUser1 =
+        new ChatMessageEvent(
+            UUID.randomUUID(),
+            room.getId(),
+            user1.getId(),
+            "유저1",
+            "same client id user1",
+            MessageType.TEXT,
+            clientMessageId,
+            java.time.LocalDateTime.now());
+    ChatMessageEvent fromUser2 =
+        new ChatMessageEvent(
+            UUID.randomUUID(),
+            room.getId(),
+            user2.getId(),
+            "유저2",
+            "same client id user2",
+            MessageType.TEXT,
+            clientMessageId,
+            java.time.LocalDateTime.now());
+
+    kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, String.valueOf(room.getId()), fromUser1);
+    kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, String.valueOf(room.getId()), fromUser2);
+
+    await()
+        .atMost(10, TimeUnit.SECONDS)
+        .untilAsserted(
+            () -> {
+              assertThat(
+                      messageRepository.countBySenderIdAndClientMessageId(
+                          user1.getId(), clientMessageId))
+                  .isEqualTo(1);
+              assertThat(
+                      messageRepository.countBySenderIdAndClientMessageId(
+                          user2.getId(), clientMessageId))
+                  .isEqualTo(1);
+            });
+  }
+
+  @Test
   @DisplayName("Kafka → Consumer → DB 저장 E2E 검증")
   void kafkaToDbEndToEnd() {
     UUID messageKey = UUID.randomUUID();

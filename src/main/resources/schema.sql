@@ -33,13 +33,15 @@ CREATE TABLE IF NOT EXISTS chat_room_members (
 CREATE TABLE IF NOT EXISTS messages (
     id              BIGSERIAL PRIMARY KEY,
     message_key     UUID         NOT NULL UNIQUE,
+    client_message_id UUID       NOT NULL,
     room_id         BIGINT       NOT NULL REFERENCES chat_rooms(id),
     sender_id       BIGINT       NOT NULL REFERENCES users(id),
     content         TEXT         NOT NULL,
     type            VARCHAR(20)  NOT NULL DEFAULT 'TEXT',
     kafka_partition INT,
     kafka_offset    BIGINT,
-    created_at      TIMESTAMP    NOT NULL DEFAULT NOW()
+    created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
+    CONSTRAINT uk_messages_sender_client_message UNIQUE (sender_id, client_message_id)
 );
 
 -- 메시지 조회 성능을 위한 복합 인덱스
@@ -63,4 +65,5 @@ CREATE INDEX IF NOT EXISTS idx_messages_sender_id
 -- UNIQUE(room_id, user_id) → findByChatRoomIdAndUserId, existsByChatRoomIdAndUserId, incrementUnreadCountForOtherMembers, COUNT 서브쿼리
 -- idx_chat_room_members_user_id → findAllWithMemberInfoByUserId (내 채팅방 목록)
 -- idx_messages_room_id_id → 커서 페이지네이션, countUnreadMessages
--- message_key UNIQUE → existsByMessageKey (멱등성 체크)
+-- message_key UNIQUE → existsByMessageKey (Kafka/DLT 멱등성 체크)
+-- UNIQUE(sender_id, client_message_id) → 클라이언트 재시도 DB 멱등성 체크
