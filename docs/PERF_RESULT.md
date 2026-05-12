@@ -567,6 +567,46 @@ $ redis-cli TTL "rooms::1"
 - `send_to_receive_latency`: 전송한 메시지 content marker가 room topic으로 돌아온 경우에만 기록
 - `read_receipt_api_latency`: 읽음 처리 API 응답 시간
 - `messages_sent`, `acks_received`, `nacks_received`, `messages_received`, `errors`
+- `ws_connection_success_rate`: WebSocket upgrade 성공률
+- `ack_success_rate`: 전송 메시지 중 ACK 수신 비율
+- `nack_rate`: 전송 메시지 중 NACK 수신 비율
+- `delivery_success_rate`: 전송 메시지가 room topic으로 다시 관측된 비율
+- `websocket_connection_failures`: WebSocket 연결 실패 수
+
+**실행 예시:**
+
+```bash
+k6 run \
+  --env BASE_URL=http://localhost:8081 \
+  --env WS_URL=ws://localhost:8081/ws \
+  --env VUS=50 \
+  --env DURATION=30s \
+  --summary-export=k6/results/mixed-chat-summary.json \
+  k6/mixed-chat-test.js
+```
+
+Smoke 확인:
+
+```bash
+k6 run \
+  --env BASE_URL=http://localhost:8081 \
+  --env WS_URL=ws://localhost:8081/ws \
+  --env SMOKE=1 \
+  k6/mixed-chat-test.js
+```
+
+**결과 기록 템플릿:**
+
+| 구분 | 값 | 조건 |
+| --- | --- | --- |
+| HTTP RPS | pending | 실행 후 기록 |
+| HTTP p95 | pending | 실행 후 기록 |
+| `message_send_ack_latency` p95 | pending | 실행 후 기록 |
+| `send_to_receive_latency` p95 | pending | 실행 후 기록 |
+| ACK success rate | pending | 실행 후 기록 |
+| NACK rate | pending | 실행 후 기록 |
+| delivery success rate | pending | 실행 후 기록 |
+| read receipt API p95 | pending | 실행 후 기록 |
 
 **결과:** scenario added, result pending
 

@@ -86,6 +86,8 @@ echo "------------------------------------------"
 k6 run \
     --env BASE_URL=http://localhost:8081 \
     --env WS_URL=ws://localhost:8081/ws \
+    --env VUS="${MIXED_VUS:-50}" \
+    --env DURATION="${MIXED_DURATION:-30s}" \
     --out json="${RESULTS_DIR}/mixed-single-${TIMESTAMP}.json" \
     --summary-export="${RESULTS_DIR}/mixed-single-${TIMESTAMP}-summary.json" \
     "${SCRIPT_DIR}/mixed-chat-test.js"
