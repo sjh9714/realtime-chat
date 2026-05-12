@@ -5,15 +5,18 @@ import com.realtime.chat.config.KafkaConfig;
 import com.realtime.chat.domain.ChatRoom;
 import com.realtime.chat.domain.Message;
 import com.realtime.chat.domain.User;
+import com.realtime.chat.dto.MessagePersistedNotification;
 import com.realtime.chat.event.ChatMessageEvent;
 import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.ChatRoomRepository;
 import com.realtime.chat.repository.MessageRepository;
 import com.realtime.chat.repository.UserRepository;
+import com.realtime.chat.service.RedisPubSubService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +43,7 @@ public class MessagePersistenceConsumer {
   private final Counter messagesFailedCounter;
   private final Timer messagesLatencyTimer;
   private final CacheManager cacheManager;
+  private final RedisPubSubService redisPubSubService;
 
   @KafkaListener(
       topics = KafkaConfig.MESSAGES_TOPIC,
@@ -54,6 +58,8 @@ public class MessagePersistenceConsumer {
       // 멱등성 체크: 동일 messageKey가 이미 저장되어 있으면 스킵
       if (messageRepository.existsByMessageKey(event.getMessageKey())) {
         log.info("중복 메시지 스킵: messageKey={}", event.getMessageKey());
+        publishPersistedIfExisting(
+            messageRepository.findByMessageKey(event.getMessageKey()), event);
         ack.acknowledge();
         return;
       }
@@ -62,6 +68,7 @@ public class MessagePersistenceConsumer {
             "중복 클라이언트 메시지 스킵: senderId={}, clientMessageId={}",
             event.getSenderId(),
             event.getClientMessageId());
+        publishPersistedIfExisting(findByClientMessage(event), event);
         ack.acknowledge();
         return;
       }
@@ -93,6 +100,7 @@ public class MessagePersistenceConsumer {
               event.getMessageKey(),
               event.getSenderId(),
               event.getClientMessageId());
+          publishPersistedIfExisting(findDuplicateMessage(event), event);
           ack.acknowledge();
           return;
         }
@@ -106,6 +114,8 @@ public class MessagePersistenceConsumer {
       if (roomsCache != null) {
         chatRoomMemberRepository.findUserIdsByRoomId(event.getRoomId()).forEach(roomsCache::evict);
       }
+
+      publishPersisted(message, event);
 
       // 메트릭: 저장 성공 + 지연시간
       messagesPersistedCounter.increment();
@@ -142,5 +152,29 @@ public class MessagePersistenceConsumer {
     return clientMessageId != null
         && messageRepository.existsBySenderIdAndClientMessageId(
             event.getSenderId(), clientMessageId);
+  }
+
+  private Optional<Message> findDuplicateMessage(ChatMessageEvent event) {
+    return messageRepository
+        .findByMessageKey(event.getMessageKey())
+        .or(() -> findByClientMessage(event));
+  }
+
+  private Optional<Message> findByClientMessage(ChatMessageEvent event) {
+    UUID clientMessageId = event.getClientMessageId();
+    if (clientMessageId == null) {
+      return Optional.empty();
+    }
+    return messageRepository.findBySenderIdAndClientMessageId(
+        event.getSenderId(), clientMessageId);
+  }
+
+  private void publishPersistedIfExisting(Optional<Message> message, ChatMessageEvent event) {
+    message.ifPresent(existingMessage -> publishPersisted(existingMessage, event));
+  }
+
+  private void publishPersisted(Message message, ChatMessageEvent event) {
+    redisPubSubService.publishPersisted(
+        MessagePersistedNotification.from(message, event.getSenderId(), event.getRoomId()));
   }
 }
