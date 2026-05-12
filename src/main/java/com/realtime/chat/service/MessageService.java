@@ -4,8 +4,11 @@ import com.realtime.chat.common.BusinessException;
 import com.realtime.chat.domain.Message;
 import com.realtime.chat.dto.MessagePageResponse;
 import com.realtime.chat.dto.MessageResponse;
+import com.realtime.chat.dto.MessageSyncResponse;
 import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.MessageRepository;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -15,6 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class MessageService {
+
+  private static final int DEFAULT_SYNC_LIMIT = 50;
+  private static final int MAX_SYNC_LIMIT = 100;
 
   private final MessageRepository messageRepository;
   private final ChatRoomMemberRepository chatRoomMemberRepository;
@@ -47,5 +53,53 @@ public class MessageService {
     Long nextCursor = hasMore ? messages.get(messages.size() - 1).getId() : null;
 
     return new MessagePageResponse(messageResponses, hasMore, nextCursor);
+  }
+
+  @Transactional(readOnly = true)
+  public MessageSyncResponse syncMessages(
+      Long userId, Long roomId, Long afterMessageId, Integer limit) {
+    if (!chatRoomMemberRepository.existsByChatRoomIdAndUserId(roomId, userId)) {
+      throw new BusinessException(HttpStatus.FORBIDDEN, "채팅방에 참여하지 않은 사용자입니다.");
+    }
+
+    int normalizedLimit = normalizeSyncLimit(limit);
+    int fetchSize = normalizedLimit + 1;
+    List<Message> messages;
+
+    if (afterMessageId == null) {
+      messages = new ArrayList<>(messageRepository.findByRoomIdLatest(roomId, fetchSize));
+    } else {
+      validateAfterMessageId(roomId, afterMessageId);
+      messages = messageRepository.findByRoomIdAfterMessageId(roomId, afterMessageId, fetchSize);
+    }
+
+    boolean hasMore = messages.size() > normalizedLimit;
+    if (hasMore) {
+      messages = messages.subList(0, normalizedLimit);
+    }
+    if (afterMessageId == null) {
+      messages = new ArrayList<>(messages);
+      messages.sort(Comparator.comparing(Message::getId));
+    }
+
+    List<MessageResponse> responses = messages.stream().map(MessageResponse::from).toList();
+    Long lastMessageId = messages.isEmpty() ? null : messages.get(messages.size() - 1).getId();
+
+    return new MessageSyncResponse(responses, hasMore, lastMessageId);
+  }
+
+  private int normalizeSyncLimit(Integer limit) {
+    int requestedLimit = limit == null ? DEFAULT_SYNC_LIMIT : limit;
+    if (requestedLimit < 1) {
+      throw new BusinessException(HttpStatus.BAD_REQUEST, "limit은 1 이상이어야 합니다.");
+    }
+    return Math.min(requestedLimit, MAX_SYNC_LIMIT);
+  }
+
+  private void validateAfterMessageId(Long roomId, Long afterMessageId) {
+    messageRepository
+        .findByIdAndChatRoomId(afterMessageId, roomId)
+        .orElseThrow(
+            () -> new BusinessException(HttpStatus.BAD_REQUEST, "잘못된 메시지 동기화 기준입니다."));
   }
 }
