@@ -327,6 +327,11 @@ user:presence:{userId}:sessions            Redis Set
 | `acks_received` | ACK 수신 수 |
 | `nacks_received` | NACK 수신 수 |
 | `messages_received` | WebSocket MESSAGE 수신 수 |
+| `ws_connection_success_rate` | WebSocket upgrade 성공률 |
+| `ack_success_rate` | 전송 메시지 중 ACK 수신 비율 |
+| `nack_rate` | 전송 메시지 중 NACK 수신 비율 |
+| `delivery_success_rate` | 전송 메시지가 room topic으로 다시 관측된 비율 |
+| `websocket_connection_failures` | WebSocket 연결 실패 수 |
 | `mixed_error_rate` | mixed scenario error rate |
 
 ---

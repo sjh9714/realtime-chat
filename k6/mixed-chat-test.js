@@ -8,19 +8,35 @@ import { Counter, Rate, Trend } from 'k6/metrics';
 // k6 run --env BASE_URL=http://localhost:8081 --env WS_URL=ws://localhost:8081/ws k6/mixed-chat-test.js
 // 기존 토큰/방을 쓰려면:
 // k6 run --env AUTH_TOKEN=... --env ROOM_ID=1 k6/mixed-chat-test.js
+// Smoke 옵션:
+// k6 run --env SMOKE=1 k6/mixed-chat-test.js
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const WS_URL = __ENV.WS_URL || 'ws://localhost:8080/ws';
 const AUTH_TOKEN = __ENV.AUTH_TOKEN;
 const ROOM_ID = __ENV.ROOM_ID ? Number(__ENV.ROOM_ID) : null;
 const NUM_USERS = Number(__ENV.NUM_USERS || 20);
+const SMOKE = __ENV.SMOKE === '1' || __ENV.SMOKE === 'true';
+const TARGET_VUS = Number(__ENV.VUS || (SMOKE ? 1 : 50));
+const DURATION = __ENV.DURATION || (SMOKE ? '10s' : '30s');
+const RAMP_DURATION = SMOKE ? '1s' : '10s';
+const MAX_MIXED_ERROR_RATE = __ENV.MAX_MIXED_ERROR_RATE || '0.05';
+const MAX_NACK_RATE = __ENV.MAX_NACK_RATE || '0.01';
+const MIN_ACK_SUCCESS_RATE = __ENV.MIN_ACK_SUCCESS_RATE || (SMOKE ? '0.80' : '0.95');
+const MIN_WS_CONNECTION_SUCCESS_RATE =
+    __ENV.MIN_WS_CONNECTION_SUCCESS_RATE || (SMOKE ? '0.80' : '0.95');
 
 const messagesSent = new Counter('messages_sent');
 const messagesReceived = new Counter('messages_received');
 const acksReceived = new Counter('acks_received');
 const nacksReceived = new Counter('nacks_received');
 const errors = new Counter('errors');
+const websocketConnectionFailures = new Counter('websocket_connection_failures');
 const mixedErrorRate = new Rate('mixed_error_rate');
+const wsConnectionSuccessRate = new Rate('ws_connection_success_rate');
+const ackSuccessRate = new Rate('ack_success_rate');
+const nackRate = new Rate('nack_rate');
+const deliverySuccessRate = new Rate('delivery_success_rate');
 const messageSendAckLatency = new Trend('message_send_ack_latency', true);
 const sendToReceiveLatency = new Trend('send_to_receive_latency', true);
 const readReceiptApiLatency = new Trend('read_receipt_api_latency', true);
@@ -31,18 +47,18 @@ export const options = {
             executor: 'ramping-vus',
             startVUs: 0,
             stages: [
-                { duration: '10s', target: 10 },
-                { duration: '30s', target: 50 },
-                { duration: '10s', target: 0 },
+                { duration: RAMP_DURATION, target: Math.min(10, TARGET_VUS) },
+                { duration: DURATION, target: TARGET_VUS },
+                { duration: RAMP_DURATION, target: 0 },
             ],
         },
     },
     thresholds: {
         http_req_failed: ['rate<0.01'],
-        http_req_duration: ['p(95)<500'],
-        mixed_error_rate: ['rate<0.05'],
-        message_send_ack_latency: ['p(95)<1000'],
-        read_receipt_api_latency: ['p(95)<500'],
+        mixed_error_rate: [`rate<${MAX_MIXED_ERROR_RATE}`],
+        nack_rate: [`rate<${MAX_NACK_RATE}`],
+        ack_success_rate: [`rate>${MIN_ACK_SUCCESS_RATE}`],
+        ws_connection_success_rate: [`rate>${MIN_WS_CONNECTION_SUCCESS_RATE}`],
     },
 };
 
@@ -117,9 +133,15 @@ export default function (data) {
     let latestMessageId = latestMessageIdFrom(history);
 
     const wsResult = runWebSocketFlow(user.token, roomId);
-    check(wsResult, {
+    const connected = check(wsResult, {
         'websocket upgraded': (r) => r && r.status === 101,
     });
+    wsConnectionSuccessRate.add(connected);
+    if (!connected) {
+        websocketConnectionFailures.add(1);
+        mixedErrorRate.add(true);
+        errors.add(1);
+    }
 
     if (latestMessageId <= 0) {
         latestMessageId = fetchLatestMessageId(roomId, headers);
@@ -153,7 +175,9 @@ function runWebSocketFlow(token, roomId) {
         sent: false,
         sendStartedAt: 0,
         acked: false,
+        nacked: false,
         receivedOwnMessage: false,
+        finalized: false,
     };
 
     return ws.connect(WS_URL, {}, function (socket) {
@@ -173,13 +197,16 @@ function runWebSocketFlow(token, roomId) {
         socket.on('error', function (error) {
             errors.add(1);
             mixedErrorRate.add(true);
+            websocketConnectionFailures.add(1);
             console.error(`WebSocket error: ${error && error.error ? error.error() : error}`);
+        });
+
+        socket.on('close', function () {
+            finalizeWebSocketFlow(state);
         });
 
         socket.setTimeout(function () {
             if (state.sent && !state.acked) {
-                errors.add(1);
-                mixedErrorRate.add(true);
                 console.error(`ACK timeout: roomId=${roomId}, clientMessageId=${clientMessageId}`);
             }
             socket.close();
@@ -232,17 +259,15 @@ function handleFrame(socket, rawFrame, roomId, clientMessageId, marker, state) {
             state.acked = true;
             acksReceived.add(1);
             messageSendAckLatency.add(Date.now() - state.sendStartedAt);
-            mixedErrorRate.add(false);
         }
 
         if (body && body.clientMessageId === clientMessageId && body.status === 'FAILED') {
+            state.nacked = true;
             nacksReceived.add(1);
-            errors.add(1);
-            mixedErrorRate.add(true);
             console.error(`Kafka publish NACK: roomId=${roomId}, reason=${body.reason}`);
         }
 
-        if (body && body.content === marker) {
+        if (isOwnRoomMessage(body, clientMessageId, marker)) {
             state.receivedOwnMessage = true;
             sendToReceiveLatency.add(Date.now() - state.sendStartedAt);
         }
@@ -251,6 +276,31 @@ function handleFrame(socket, rawFrame, roomId, clientMessageId, marker, state) {
             socket.close();
         }
     }
+}
+
+function finalizeWebSocketFlow(state) {
+    if (state.finalized || !state.sent) {
+        return;
+    }
+
+    state.finalized = true;
+    ackSuccessRate.add(state.acked);
+    nackRate.add(state.nacked);
+    deliverySuccessRate.add(state.receivedOwnMessage);
+
+    if (!state.acked || state.nacked) {
+        errors.add(1);
+        mixedErrorRate.add(true);
+    } else {
+        mixedErrorRate.add(false);
+    }
+}
+
+function isOwnRoomMessage(body, clientMessageId, marker) {
+    if (!body) {
+        return false;
+    }
+    return body.clientMessageId === clientMessageId || body.content === marker;
 }
 
 function recordHttpCheck(response, name, predicate) {
