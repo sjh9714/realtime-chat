@@ -27,6 +27,7 @@
 | 서버 간 브로드캐스트 | Redis Pub/Sub | 여러 app instance의 WebSocket session fan-out |
 | 캐시/Presence/Rate limit | Redis | TTL key, set, Cache Aside, global fixed-window limit |
 | 저장소 | PostgreSQL 16 | 메시지 영속화와 unique constraint 기반 멱등성 |
+| Migration | Flyway | versioned SQL migration과 JPA validate 분리 |
 | 테스트 | JUnit 5, Testcontainers, k6 | 통합 테스트와 부하 테스트 |
 
 ## 아키텍처

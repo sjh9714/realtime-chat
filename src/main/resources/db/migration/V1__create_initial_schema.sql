@@ -31,16 +31,16 @@ CREATE TABLE IF NOT EXISTS chat_room_members (
 
 -- 메시지
 CREATE TABLE IF NOT EXISTS messages (
-    id              BIGSERIAL PRIMARY KEY,
-    message_key     UUID         NOT NULL UNIQUE,
-    client_message_id UUID       NOT NULL,
-    room_id         BIGINT       NOT NULL REFERENCES chat_rooms(id),
-    sender_id       BIGINT       NOT NULL REFERENCES users(id),
-    content         TEXT         NOT NULL,
-    type            VARCHAR(20)  NOT NULL DEFAULT 'TEXT',
-    kafka_partition INT,
-    kafka_offset    BIGINT,
-    created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
+    id                BIGSERIAL PRIMARY KEY,
+    message_key       UUID        NOT NULL UNIQUE,
+    client_message_id UUID        NOT NULL,
+    room_id           BIGINT      NOT NULL REFERENCES chat_rooms(id),
+    sender_id         BIGINT      NOT NULL REFERENCES users(id),
+    content           TEXT        NOT NULL,
+    type              VARCHAR(20) NOT NULL DEFAULT 'TEXT',
+    kafka_partition   INT,
+    kafka_offset      BIGINT,
+    created_at        TIMESTAMP   NOT NULL DEFAULT NOW(),
     CONSTRAINT uk_messages_sender_client_message UNIQUE (sender_id, client_message_id)
 );
 

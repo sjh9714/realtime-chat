@@ -451,11 +451,11 @@ update:        Entity 변경 시 테이블 수정 (위험할 수 있음)
 validate:      Entity와 테이블이 맞는지만 확인 (우리 선택)
 none:          아무것도 안 함
 
-→ validate를 쓰고, 테이블은 schema.sql로 직접 관리
+→ validate를 쓰고, 테이블은 Flyway migration으로 버전 관리
 → 프로덕션에서는 이 방식이 안전함
 ```
 
-### schema.sql — 테이블 생성
+### Flyway migration — 테이블 생성
 
 ```sql
 -- messages 테이블의 핵심 컬럼들
