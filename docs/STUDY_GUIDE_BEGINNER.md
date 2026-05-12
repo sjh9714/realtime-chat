@@ -2287,7 +2287,7 @@ user.updateLastSeenAt();                 // "마지막 접속 시각 갱신"
 
 2단계: "데이터가 어떻게 생겼는지" 이해
 → domain/ 폴더 (User, ChatRoom, Message 등)
-→ schema.sql (테이블 구조)
+→ db/migration/ 폴더 (Flyway 테이블 구조)
 
 3단계: "API가 뭐가 있는지" 확인
 → controller/ 폴더 (어떤 요청을 받는지)

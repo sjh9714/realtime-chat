@@ -452,6 +452,13 @@ docker compose up -d postgres redis kafka kafka-ui
 http://localhost:8080
 ```
 
+스키마는 Flyway migration으로 생성됩니다. 기존 `schema.sql` 기반 Docker volume을 쓰던 로컬 환경에서는 migration history가 없을 수 있으므로, 스키마 초기화 문제가 나면 아래처럼 volume을 비운 뒤 다시 실행합니다.
+
+```bash
+docker compose down -v
+docker compose up -d
+```
+
 ### 3. 테스트 실행
 
 Testcontainers로 PostgreSQL, Kafka, Redis를 띄우므로 Docker가 실행 중이어야 합니다.
@@ -517,7 +524,7 @@ k6 run \
 | Messaging | Apache Kafka 3.9.0 |
 | Cache / PubSub / Presence / Rate limit | Redis 7 |
 | Database | PostgreSQL 16 |
-| Persistence | Spring Data JPA, Hibernate |
+| Persistence | Spring Data JPA, Hibernate, Flyway |
 | Observability | Spring Actuator, Micrometer, Prometheus, Grafana |
 | Test | JUnit 5, Mockito, Testcontainers, Awaitility |
 | Performance | k6 |

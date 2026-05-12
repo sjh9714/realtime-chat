@@ -25,8 +25,11 @@ spring:
 
   sql:
     init:
-      mode: always
-      schema-locations: classpath:schema.sql
+      mode: never
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
 
   data:
     redis:
