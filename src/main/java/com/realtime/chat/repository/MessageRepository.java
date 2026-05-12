@@ -26,6 +26,9 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
   // messageKey로 메시지 조회
   Optional<Message> findByMessageKey(UUID messageKey);
 
+  // 클라이언트 재시도 멱등성 처리: sender/clientMessageId로 기존 메시지 조회
+  Optional<Message> findBySenderIdAndClientMessageId(Long senderId, UUID clientMessageId);
+
   // 읽음 처리 검증: 해당 room의 메시지인지 확인
   @Query(
       """

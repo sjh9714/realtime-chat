@@ -25,6 +25,7 @@ public class RedisConfig {
   public static final String CHAT_ROOM_CHANNEL_PREFIX = "chat:room:";
   public static final String CHAT_ROOM_PATTERN = "chat:room:*";
   public static final String PRESENCE_CHANNEL = "chat:presence";
+  public static final String USER_NOTIFICATION_CHANNEL = "chat:user-notifications";
 
   @Bean
   public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
@@ -55,11 +56,14 @@ public class RedisConfig {
   public RedisMessageListenerContainer redisMessageListenerContainer(
       RedisConnectionFactory connectionFactory,
       MessageListenerAdapter messageListenerAdapter,
-      MessageListenerAdapter presenceListenerAdapter) {
+      MessageListenerAdapter presenceListenerAdapter,
+      MessageListenerAdapter userNotificationListenerAdapter) {
     RedisMessageListenerContainer container = new RedisMessageListenerContainer();
     container.setConnectionFactory(connectionFactory);
     container.addMessageListener(messageListenerAdapter, new PatternTopic(CHAT_ROOM_PATTERN));
     container.addMessageListener(presenceListenerAdapter, new ChannelTopic(PRESENCE_CHANNEL));
+    container.addMessageListener(
+        userNotificationListenerAdapter, new ChannelTopic(USER_NOTIFICATION_CHANNEL));
     return container;
   }
 
@@ -71,5 +75,11 @@ public class RedisConfig {
   @Bean
   public MessageListenerAdapter presenceListenerAdapter(RedisPubSubService redisPubSubService) {
     return new MessageListenerAdapter(redisPubSubService, "onPresenceMessage");
+  }
+
+  @Bean
+  public MessageListenerAdapter userNotificationListenerAdapter(
+      RedisPubSubService redisPubSubService) {
+    return new MessageListenerAdapter(redisPubSubService, "onUserNotificationMessage");
   }
 }

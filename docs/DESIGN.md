@@ -73,6 +73,7 @@ sequenceDiagram
     participant UserQueue as User ACK/NACK Queue
     participant Persist as Persistence Consumer
     participant DB as PostgreSQL
+    participant UserNotify as Redis User Notification
     participant Broadcast as Broadcast Consumer
     participant Redis as Redis Pub/Sub
     participant OtherApp as Other App Instances
@@ -90,13 +91,15 @@ sequenceDiagram
     end
     Kafka-->>Persist: consume message
     Persist->>DB: save message
+    Persist->>UserNotify: publish PERSISTED notification
+    UserNotify-->>UserQueue: PERSISTED saved
     Kafka-->>Broadcast: consume message
     Broadcast->>Redis: publish room event
     Redis-->>OtherApp: fan-out event
     OtherApp-->>Client: WebSocket broadcast
 ```
 
-ACK/NACK는 Kafka publish callback 기준이다. DB 저장 완료, Redis Pub/Sub broadcast 완료, recipient delivery 완료를 의미하지 않는다. `clientMessageId`는 ACK/NACK correlation과 클라이언트 재시도 멱등성에 사용한다.
+ACK/NACK는 Kafka publish callback 기준이다. DB 저장 완료는 별도 PERSISTED 알림으로 전달한다. PERSISTED도 Redis Pub/Sub broadcast 완료, recipient delivery 완료, read 완료를 의미하지 않는다. `clientMessageId`는 ACK/NACK correlation과 클라이언트 재시도 멱등성에 사용한다.
 
 ### Failure / DLT Replay Sequence
 
@@ -157,7 +160,7 @@ rate:ws:send:user:{userId}:{epochSecond}
 - Redis increment 또는 TTL 설정이 실패하면 abuse prevention을 우선해 fail-closed로 SEND를 거부한다.
 - fixed-window 방식이므로 초 경계 burst가 발생할 수 있다. 더 부드러운 제한은 token bucket 또는 sliding window Lua script가 별도 개선 범위다.
 
-## 메시지 전송 ACK/NACK
+## 메시지 전송 ACK/NACK와 PERSISTED ACK
 
 `/app/chat.send`는 메시지를 직접 DB에 저장하지 않고 Kafka `chat.messages` topic에 publish한다.
 
@@ -167,11 +170,14 @@ Client SEND /app/chat.send
   -> KafkaTemplate.send(chat.messages, key = roomId, event)
   -> success callback: /user/queue/messages/ack
   -> failure callback: /user/queue/messages/error
+  -> persistence consumer save success: /user/queue/messages/persisted
 ```
 
 ACK payload는 `clientMessageId`, `roomId`, `status=ACCEPTED`, `acceptedAt`을 포함한다. NACK payload는 `clientMessageId`, `roomId`, `status=FAILED`, `reason`을 포함한다.
 
-ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻이다. PostgreSQL 저장 완료, Redis Pub/Sub 브로드캐스트 완료, 상대 클라이언트 수신 완료를 의미하지 않는다.
+PERSISTED payload는 `clientMessageId`, `messageKey`, `messageId`, `roomId`, `status=PERSISTED`, `persistedAt`을 포함한다.
+
+ACCEPTED ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻이다. PERSISTED ACK는 PostgreSQL 저장 완료 또는 기존 idempotent row 확인을 뜻한다. PERSISTED도 Redis Pub/Sub 브로드캐스트 완료, 상대 클라이언트 수신 완료, read 완료를 의미하지 않는다.
 
 `clientMessageId`는 ACK/NACK correlation과 클라이언트 재시도 멱등성 용도다. Kafka event의 `messageKey`는 event/message identity이며 DLT replay와 Kafka-level duplication 멱등성 기준으로 유지한다. DB 저장 시에는 `messages(sender_id, client_message_id)` unique constraint가 같은 발신자의 같은 클라이언트 메시지 중복 저장을 막는다.
 
@@ -285,8 +291,9 @@ GET /api/rooms/{roomId}/messages/sync?afterMessageId={lastReceivedMessageId}&lim
 
 ## 현재 한계
 
-- ACK/NACK는 Kafka publish 단계까지만 의미한다.
-- `clientMessageId`는 클라이언트 재시도 중복 저장 방지에 사용하지만 persisted ACK나 delivered ACK를 의미하지 않는다.
+- ACCEPTED ACK/NACK는 Kafka publish 단계까지만 의미한다.
+- PERSISTED ACK는 DB 저장 완료 또는 기존 idempotent row 확인까지만 의미하며, delivered/read ACK를 의미하지 않는다.
+- `clientMessageId`는 클라이언트 재시도 중복 저장 방지에 사용하지만 delivered ACK를 의미하지 않는다.
 - WebSocket SEND rate limit은 Redis fixed-window 방식이라 초 경계 burst를 완전히 smoothing하지 않는다.
 - Redis Pub/Sub fan-out은 best-effort이며, 클라이언트는 재연결 시 sync API로 누락 가능성을 보정해야 한다.
 - 같은 room 내 순서는 Kafka partition ordering에 의존하며, 전역 순서는 제공하지 않는다.

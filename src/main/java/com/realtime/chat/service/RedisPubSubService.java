@@ -2,6 +2,8 @@ package com.realtime.chat.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.realtime.chat.config.RedisConfig;
+import com.realtime.chat.dto.MessagePersistedNotification;
+import com.realtime.chat.dto.MessagePersistedResponse;
 import com.realtime.chat.dto.PresenceEvent;
 import com.realtime.chat.event.ChatMessageEvent;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +46,24 @@ public class RedisPubSubService {
     }
   }
 
+  // Redis 채널에 DB 저장 완료 알림 발행 (서버 간 user destination 라우팅)
+  public void publishPersisted(MessagePersistedNotification notification) {
+    try {
+      String message = objectMapper.writeValueAsString(notification);
+      redisTemplate.convertAndSend(RedisConfig.USER_NOTIFICATION_CHANNEL, message);
+      log.debug(
+          "PERSISTED 알림 발행: userId={}, messageKey={}",
+          notification.getTargetUserId(),
+          notification.getMessageKey());
+    } catch (Exception e) {
+      log.error(
+          "PERSISTED 알림 발행 실패: userId={}, messageKey={}",
+          notification.getTargetUserId(),
+          notification.getMessageKey(),
+          e);
+    }
+  }
+
   // Redis 구독 Presence 이벤트 수신 → STOMP로 전체 브로드캐스트
   public void onPresenceMessage(String message, String channel) {
     try {
@@ -52,6 +72,24 @@ public class RedisPubSubService {
       log.debug("Presence 브로드캐스트: userId={}, status={}", event.getUserId(), event.getStatus());
     } catch (Exception e) {
       log.error("Presence 브로드캐스트 실패: channel={}", channel, e);
+    }
+  }
+
+  // Redis 구독 user notification 수신 → 해당 user destination으로 전달
+  public void onUserNotificationMessage(String message, String channel) {
+    try {
+      MessagePersistedNotification notification =
+          objectMapper.readValue(message, MessagePersistedNotification.class);
+      messagingTemplate.convertAndSendToUser(
+          String.valueOf(notification.getTargetUserId()),
+          "/queue/messages/persisted",
+          MessagePersistedResponse.from(notification));
+      log.debug(
+          "PERSISTED 알림 전달: userId={}, messageKey={}",
+          notification.getTargetUserId(),
+          notification.getMessageKey());
+    } catch (Exception e) {
+      log.error("PERSISTED 알림 전달 실패: channel={}", channel, e);
     }
   }
 

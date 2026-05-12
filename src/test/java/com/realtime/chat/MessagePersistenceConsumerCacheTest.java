@@ -1,5 +1,6 @@
 package com.realtime.chat;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -13,11 +14,13 @@ import com.realtime.chat.domain.Message;
 import com.realtime.chat.domain.MessageType;
 import com.realtime.chat.domain.RoomType;
 import com.realtime.chat.domain.User;
+import com.realtime.chat.dto.MessagePersistedNotification;
 import com.realtime.chat.event.ChatMessageEvent;
 import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.ChatRoomRepository;
 import com.realtime.chat.repository.MessageRepository;
 import com.realtime.chat.repository.UserRepository;
+import com.realtime.chat.service.RedisPubSubService;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import java.time.LocalDateTime;
@@ -28,6 +31,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.cache.Cache;
@@ -55,6 +59,8 @@ class MessagePersistenceConsumerCacheTest {
   @Mock private CacheManager cacheManager;
 
   @Mock private Cache roomsCache;
+
+  @Mock private RedisPubSubService redisPubSubService;
 
   @Mock private Acknowledgment acknowledgment;
 
@@ -89,6 +95,15 @@ class MessagePersistenceConsumerCacheTest {
 
     consumer.consume(record, acknowledgment);
 
+    ArgumentCaptor<MessagePersistedNotification> notificationCaptor =
+        ArgumentCaptor.forClass(MessagePersistedNotification.class);
+    verify(redisPubSubService).publishPersisted(notificationCaptor.capture());
+    MessagePersistedNotification notification = notificationCaptor.getValue();
+    assertThat(notification.getTargetUserId()).isEqualTo(10L);
+    assertThat(notification.getClientMessageId()).isEqualTo(clientMessageId);
+    assertThat(notification.getMessageKey()).isEqualTo(event.getMessageKey());
+    assertThat(notification.getRoomId()).isEqualTo(20L);
+
     verify(roomsCache).evict(10L);
     verify(roomsCache).evict(11L);
     verify(roomsCache, never()).evict(99L);
@@ -109,6 +124,7 @@ class MessagePersistenceConsumerCacheTest {
 
     verify(acknowledgment).acknowledge();
     verify(messageRepository, never()).saveAndFlush(any(Message.class));
+    verify(redisPubSubService, never()).publishPersisted(any(MessagePersistedNotification.class));
     verifyNoInteractions(chatRoomRepository, userRepository, chatRoomMemberRepository, cacheManager);
     verify(messagesPersistedCounter, never()).increment();
     verify(messagesFailedCounter, never()).increment();
@@ -130,6 +146,7 @@ class MessagePersistenceConsumerCacheTest {
 
     verify(acknowledgment).acknowledge();
     verify(messageRepository, never()).saveAndFlush(any(Message.class));
+    verify(redisPubSubService, never()).publishPersisted(any(MessagePersistedNotification.class));
     verifyNoInteractions(chatRoomRepository, userRepository, chatRoomMemberRepository, cacheManager);
     verify(messagesPersistedCounter, never()).increment();
     verify(messagesFailedCounter, never()).increment();
@@ -162,6 +179,64 @@ class MessagePersistenceConsumerCacheTest {
     verify(messagesFailedCounter, never()).increment();
   }
 
+  @Test
+  @DisplayName("동일 messageKey 중복 메시지는 기존 메시지의 PERSISTED 알림을 재발행하고 acknowledge한다")
+  void duplicateMessageKeyPublishesPersistedForExistingMessage() {
+    MessagePersistenceConsumer consumer = consumer();
+    User sender = new User("sender@test.com", "encoded", "보낸사람");
+    ChatRoom room = new ChatRoom(null, RoomType.DIRECT, sender);
+    UUID messageKey = UUID.randomUUID();
+    UUID clientMessageId = UUID.randomUUID();
+    ChatMessageEvent event = event(messageKey, clientMessageId);
+    Message existingMessage =
+        new Message(messageKey, clientMessageId, room, sender, "안녕하세요", MessageType.TEXT);
+    ConsumerRecord<String, ChatMessageEvent> record =
+        new ConsumerRecord<>(KafkaConfig.MESSAGES_TOPIC, 0, 0L, "20", event);
+    given(messageRepository.existsByMessageKey(messageKey)).willReturn(true);
+    given(messageRepository.findByMessageKey(messageKey)).willReturn(Optional.of(existingMessage));
+
+    consumer.consume(record, acknowledgment);
+
+    ArgumentCaptor<MessagePersistedNotification> notificationCaptor =
+        ArgumentCaptor.forClass(MessagePersistedNotification.class);
+    verify(redisPubSubService).publishPersisted(notificationCaptor.capture());
+    assertThat(notificationCaptor.getValue().getTargetUserId()).isEqualTo(10L);
+    assertThat(notificationCaptor.getValue().getClientMessageId()).isEqualTo(clientMessageId);
+    verify(acknowledgment).acknowledge();
+    verify(messageRepository, never()).saveAndFlush(any(Message.class));
+    verifyNoInteractions(chatRoomRepository, userRepository, chatRoomMemberRepository, cacheManager);
+  }
+
+  @Test
+  @DisplayName("동일 senderId/clientMessageId 중복 메시지는 기존 메시지의 PERSISTED 알림을 재발행하고 acknowledge한다")
+  void duplicateClientMessageIdPublishesPersistedForExistingMessage() {
+    MessagePersistenceConsumer consumer = consumer();
+    User sender = new User("sender@test.com", "encoded", "보낸사람");
+    ChatRoom room = new ChatRoom(null, RoomType.DIRECT, sender);
+    UUID clientMessageId = UUID.randomUUID();
+    ChatMessageEvent event = event(UUID.randomUUID(), clientMessageId);
+    Message existingMessage =
+        new Message(UUID.randomUUID(), clientMessageId, room, sender, "안녕하세요", MessageType.TEXT);
+    ConsumerRecord<String, ChatMessageEvent> record =
+        new ConsumerRecord<>(KafkaConfig.MESSAGES_TOPIC, 0, 0L, "20", event);
+    given(messageRepository.existsByMessageKey(event.getMessageKey())).willReturn(false);
+    given(messageRepository.existsBySenderIdAndClientMessageId(10L, clientMessageId))
+        .willReturn(true);
+    given(messageRepository.findBySenderIdAndClientMessageId(10L, clientMessageId))
+        .willReturn(Optional.of(existingMessage));
+
+    consumer.consume(record, acknowledgment);
+
+    ArgumentCaptor<MessagePersistedNotification> notificationCaptor =
+        ArgumentCaptor.forClass(MessagePersistedNotification.class);
+    verify(redisPubSubService).publishPersisted(notificationCaptor.capture());
+    assertThat(notificationCaptor.getValue().getTargetUserId()).isEqualTo(10L);
+    assertThat(notificationCaptor.getValue().getClientMessageId()).isEqualTo(clientMessageId);
+    verify(acknowledgment).acknowledge();
+    verify(messageRepository, never()).saveAndFlush(any(Message.class));
+    verifyNoInteractions(chatRoomRepository, userRepository, chatRoomMemberRepository, cacheManager);
+  }
+
   private ChatMessageEvent event(UUID messageKey, UUID clientMessageId) {
     return new ChatMessageEvent(
         messageKey,
@@ -183,6 +258,7 @@ class MessagePersistenceConsumerCacheTest {
         messagesPersistedCounter,
         messagesFailedCounter,
         messagesLatencyTimer,
-        cacheManager);
+        cacheManager,
+        redisPubSubService);
   }
 }
