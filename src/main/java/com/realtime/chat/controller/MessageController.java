@@ -1,6 +1,7 @@
 package com.realtime.chat.controller;
 
 import com.realtime.chat.dto.MessagePageResponse;
+import com.realtime.chat.dto.MessageSyncResponse;
 import com.realtime.chat.dto.ReadReceiptRequest;
 import com.realtime.chat.service.MessageService;
 import com.realtime.chat.service.ReadReceiptService;
@@ -26,6 +27,17 @@ public class MessageController {
       @RequestParam(required = false) Long cursor,
       @RequestParam(defaultValue = "20") int size) {
     return ResponseEntity.ok(messageService.getMessages(userId, roomId, cursor, size));
+  }
+
+  // 재연결 후 마지막 수신 메시지 이후 누락 메시지 동기화
+  @GetMapping("/messages/sync")
+  public ResponseEntity<MessageSyncResponse> syncMessages(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable Long roomId,
+      @RequestParam(required = false) Long afterMessageId,
+      @RequestParam(required = false) Integer limit) {
+    return ResponseEntity.ok(
+        messageService.syncMessages(userId, roomId, afterMessageId, limit));
   }
 
   // 읽음 처리

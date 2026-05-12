@@ -31,8 +31,10 @@ class MessageIntegrationTest extends BaseIntegrationTest {
 
   private String baseUrl;
   private String token1;
+  private String token3;
   private User user1;
   private User user2;
+  private User user3;
   private ChatRoom room;
 
   @BeforeEach
@@ -46,8 +48,10 @@ class MessageIntegrationTest extends BaseIntegrationTest {
     // 유저 생성
     token1 = signup("user1@test.com", "password123", "유저1");
     signup("user2@test.com", "password123", "유저2");
+    token3 = signup("user3@test.com", "password123", "유저3");
     user1 = userRepository.findByEmail("user1@test.com").get();
     user2 = userRepository.findByEmail("user2@test.com").get();
+    user3 = userRepository.findByEmail("user3@test.com").get();
 
     // 1:1 채팅방 생성
     CreateDirectRoomRequest directRequest = new CreateDirectRoomRequest();
@@ -108,6 +112,113 @@ class MessageIntegrationTest extends BaseIntegrationTest {
 
     // 동일 messageKey로 존재 여부 확인
     assertThat(messageRepository.existsByMessageKey(messageKey)).isTrue();
+  }
+
+  @Test
+  @DisplayName("sync API는 afterMessageId 이후 메시지를 id 오름차순으로 반환한다")
+  void syncMessagesAfterMessageIdInAscendingOrder() {
+    var messages = saveMessages(5);
+
+    ResponseEntity<MessageSyncResponse> response =
+        getWithAuth(
+            "/api/rooms/" + room.getId() + "/messages/sync?afterMessageId="
+                + messages.get(1).getId()
+                + "&limit=2",
+            MessageSyncResponse.class,
+            token1);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().getMessages())
+        .extracting(MessageResponse::getId)
+        .containsExactly(messages.get(2).getId(), messages.get(3).getId());
+    assertThat(response.getBody().isHasMore()).isTrue();
+    assertThat(response.getBody().getLastMessageId()).isEqualTo(messages.get(3).getId());
+  }
+
+  @Test
+  @DisplayName("sync API는 afterMessageId가 없으면 최신 메시지 묶음을 id 오름차순으로 반환한다")
+  void syncMessagesWithoutAfterMessageIdReturnsRecentMessagesAscending() {
+    var messages = saveMessages(5);
+
+    ResponseEntity<MessageSyncResponse> response =
+        getWithAuth(
+            "/api/rooms/" + room.getId() + "/messages/sync?limit=3",
+            MessageSyncResponse.class,
+            token1);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().getMessages())
+        .extracting(MessageResponse::getId)
+        .containsExactly(messages.get(2).getId(), messages.get(3).getId(), messages.get(4).getId());
+    assertThat(response.getBody().isHasMore()).isTrue();
+    assertThat(response.getBody().getLastMessageId()).isEqualTo(messages.get(4).getId());
+  }
+
+  @Test
+  @DisplayName("sync API는 비멤버 접근을 거부한다")
+  void syncMessagesRejectsNonMember() {
+    saveMessages(1);
+
+    ResponseEntity<String> response =
+        getWithAuth("/api/rooms/" + room.getId() + "/messages/sync", String.class, token3);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+  }
+
+  @Test
+  @DisplayName("sync API는 다른 방의 afterMessageId를 거부한다")
+  void syncMessagesRejectsAfterMessageIdFromOtherRoom() {
+    Message otherRoomMessage = saveMessageInOtherRoom();
+
+    ResponseEntity<String> response =
+        getWithAuth(
+            "/api/rooms/" + room.getId() + "/messages/sync?afterMessageId="
+                + otherRoomMessage.getId(),
+            String.class,
+            token1);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  @DisplayName("sync API는 1 미만 limit을 거부하고 100 초과 limit은 100으로 제한한다")
+  void syncMessagesValidatesAndCapsLimit() {
+    saveMessages(105);
+
+    ResponseEntity<String> badLimitResponse =
+        getWithAuth("/api/rooms/" + room.getId() + "/messages/sync?limit=0", String.class, token1);
+
+    assertThat(badLimitResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+    ResponseEntity<MessageSyncResponse> cappedLimitResponse =
+        getWithAuth(
+            "/api/rooms/" + room.getId() + "/messages/sync?limit=101",
+            MessageSyncResponse.class,
+            token1);
+
+    assertThat(cappedLimitResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(cappedLimitResponse.getBody().getMessages()).hasSize(100);
+    assertThat(cappedLimitResponse.getBody().isHasMore()).isTrue();
+  }
+
+  private java.util.List<Message> saveMessages(int count) {
+    java.util.List<Message> messages = new java.util.ArrayList<>();
+    for (int i = 0; i < count; i++) {
+      Message message = new Message(UUID.randomUUID(), room, user1, "sync 메시지 " + i, MessageType.TEXT);
+      messages.add(messageRepository.saveAndFlush(message));
+    }
+    return messages;
+  }
+
+  private Message saveMessageInOtherRoom() {
+    ChatRoom otherRoom = new ChatRoom(null, RoomType.DIRECT, user1);
+    otherRoom.addMember(user1);
+    otherRoom.addMember(user3);
+    chatRoomRepository.saveAndFlush(otherRoom);
+
+    Message message =
+        new Message(UUID.randomUUID(), otherRoom, user1, "다른 방 메시지", MessageType.TEXT);
+    return messageRepository.saveAndFlush(message);
   }
 
   private String signup(String email, String password, String nickname) {

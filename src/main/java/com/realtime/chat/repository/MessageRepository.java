@@ -57,6 +57,20 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
       """)
   List<Message> findByRoomIdLatest(@Param("roomId") Long roomId, @Param("limit") int limit);
 
+  // 재연결 동기화: 마지막 수신 메시지 이후 메시지를 오름차순으로 조회
+  @Query(
+      """
+      SELECT m FROM Message m
+      JOIN FETCH m.sender
+      WHERE m.chatRoom.id = :roomId AND m.id > :afterMessageId
+      ORDER BY m.id ASC
+      LIMIT :limit
+      """)
+  List<Message> findByRoomIdAfterMessageId(
+      @Param("roomId") Long roomId,
+      @Param("afterMessageId") Long afterMessageId,
+      @Param("limit") int limit);
+
   @Query(
       """
       SELECT m FROM Message m
