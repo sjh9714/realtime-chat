@@ -21,6 +21,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.CacheManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -39,9 +40,14 @@ public class MessagePersistenceConsumer {
   private final ChatRoomRepository chatRoomRepository;
   private final UserRepository userRepository;
   private final ChatRoomMemberRepository chatRoomMemberRepository;
+  @Qualifier("messagesPersistedCounter")
   private final Counter messagesPersistedCounter;
+  @Qualifier("messagesFailedCounter")
   private final Counter messagesFailedCounter;
+  @Qualifier("messagesLatencyTimer")
   private final Timer messagesLatencyTimer;
+  @Qualifier("roomsCacheEvictionsCounter")
+  private final Counter roomsCacheEvictionsCounter;
   private final CacheManager cacheManager;
   private final RedisPubSubService redisPubSubService;
 
@@ -112,7 +118,13 @@ public class MessagePersistenceConsumer {
           event.getRoomId(), event.getSenderId());
       var roomsCache = cacheManager.getCache("rooms");
       if (roomsCache != null) {
-        chatRoomMemberRepository.findUserIdsByRoomId(event.getRoomId()).forEach(roomsCache::evict);
+        chatRoomMemberRepository
+            .findUserIdsByRoomId(event.getRoomId())
+            .forEach(
+                userId -> {
+                  roomsCache.evict(userId);
+                  roomsCacheEvictionsCounter.increment();
+                });
       }
 
       publishPersisted(message, event);

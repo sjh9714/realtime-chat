@@ -8,6 +8,7 @@ import com.realtime.chat.config.KafkaConfig;
 import com.realtime.chat.domain.MessageType;
 import com.realtime.chat.event.ChatMessageEvent;
 import com.realtime.chat.service.DltReplayService;
+import io.micrometer.core.instrument.Counter;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -25,10 +26,12 @@ class DltReplayServiceTest {
 
   @Mock private KafkaTemplate<String, Object> kafkaTemplate;
 
+  @Mock private Counter dltReplayCounter;
+
   @Test
   @DisplayName("DLT record replay는 원래 topic으로 roomId key를 사용해 재발행하고 Kafka future를 반환한다")
   void replayMessageUsesOriginalTopicAndRoomIdKey() {
-    DltReplayService service = new DltReplayService(kafkaTemplate);
+    DltReplayService service = new DltReplayService(kafkaTemplate, dltReplayCounter);
     ChatMessageEvent event = event(20L);
     ConsumerRecord<String, ChatMessageEvent> dltRecord =
         new ConsumerRecord<>(KafkaConfig.MESSAGES_DLT, 0, 10L, null, event);
@@ -44,7 +47,7 @@ class DltReplayServiceTest {
   @Test
   @DisplayName("DLT record key가 있으면 replay key로 그대로 사용한다")
   void replayMessageKeepsDltRecordKeyWhenPresent() {
-    DltReplayService service = new DltReplayService(kafkaTemplate);
+    DltReplayService service = new DltReplayService(kafkaTemplate, dltReplayCounter);
     ChatMessageEvent event = event(20L);
     ConsumerRecord<String, ChatMessageEvent> dltRecord =
         new ConsumerRecord<>(KafkaConfig.MESSAGES_DLT, 0, 10L, "custom-key", event);
@@ -55,6 +58,20 @@ class DltReplayServiceTest {
 
     assertThat(result).isSameAs(future);
     verify(kafkaTemplate).send(KafkaConfig.MESSAGES_TOPIC, "custom-key", event);
+  }
+
+  @Test
+  @DisplayName("DLT replay 성공 완료 시 replay counter를 증가시킨다")
+  void replayMessageIncrementsCounterWhenSendCompletes() {
+    DltReplayService service = new DltReplayService(kafkaTemplate, dltReplayCounter);
+    ChatMessageEvent event = event(20L);
+    CompletableFuture<SendResult<String, Object>> future = new CompletableFuture<>();
+    given(kafkaTemplate.send(KafkaConfig.MESSAGES_TOPIC, "20", event)).willReturn(future);
+
+    service.replayMessage(event);
+    future.complete(null);
+
+    verify(dltReplayCounter).increment();
   }
 
   private ChatMessageEvent event(Long roomId) {

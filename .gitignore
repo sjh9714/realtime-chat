@@ -42,6 +42,9 @@ out/
 ### Logs ###
 *.log
 
+### Local measurement artifacts ###
+artifacts/
+
 ### Docker ###
 docker-compose.override.yml
 

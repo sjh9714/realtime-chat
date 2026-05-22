@@ -24,7 +24,7 @@
 11. [STEP 8: 테스트 — 진짜 잘 되는지 확인](#11-step-8-테스트)
 12. [메시지 여행기 — "안녕"이 전달되기까지](#12-메시지-여행기)
 
-### Part 3: 2차 구현 (프로덕션 품질) — 진짜 서비스처럼 만들기
+### Part 3: 2차 구현 (운영 고려사항) — 진짜 서비스에 가까운 제약 다루기
 13. [STEP 9: 건강 검진 + 우아한 퇴장](#13-step-9-건강-검진--우아한-퇴장)
 14. [STEP 10: 도배 방지](#14-step-10-도배-방지)
 15. [STEP 11: 실패한 메시지 구조대](#15-step-11-실패한-메시지-구조대)
@@ -67,7 +67,7 @@
 
 ### 그런데 왜 이렇게 복잡해?
 
-카카오톡 사용자가 1명이면 간단합니다. 하지만 **5,000만 명**이 동시에 쓴다면?
+카카오톡 사용자가 1명이면 간단합니다. 하지만 **사용자가 많아지고 서버가 여러 대가 되면**?
 
 ```
 [간단한 버전 — 서버 1대]
@@ -76,7 +76,7 @@
 
 문제없어 보이죠? 그런데...
 
-Q: 서버 1대가 5,000만 명을 감당할 수 있을까?
+Q: 서버 1대가 계속 늘어나는 사용자를 감당할 수 있을까?
 A: 불가능! 서버를 여러 대로 늘려야 합니다.
 ```
 
@@ -95,7 +95,7 @@ A: 불가능! 서버를 여러 대로 늘려야 합니다.
 → WebSocket: 사용자에게 실시간으로 배달하는 배달원
 ```
 
-이게 이 프로젝트의 전부입니다. **서버가 여러 대여도 메시지가 안전하고 빠르게 전달되도록** 만드는 것!
+이게 이 프로젝트의 전부입니다. **서버가 여러 대여도 메시지 저장 경로와 현재 연결된 사용자 fan-out 경로를 분리해 설명 가능하게** 만드는 것!
 
 ### 전체 그림 — 택배 배송으로 이해하기
 
@@ -853,8 +853,8 @@ Kafka는 key를 기준으로 파티션(칸)을 정함:
 → roomId=1인 메시지 → 항상 파티션 3에 저장 (예시)
 → roomId=2인 메시지 → 항상 파티션 1에 저장
 
-같은 파티션 안에서는 순서가 보장됨!
-→ 1번 방의 "안녕" → "뭐해?" → "밥 먹자" 순서가 절대 바뀌지 않음!
+같은 파티션 안에서는 offset 순서 범위로 해석할 수 있음!
+→ 1번 방의 "안녕" → "뭐해?" → "밥 먹자" 순서를 roomId key 기준으로 좁혀서 설명할 수 있음
 
 만약 key가 없으면?
 → 메시지가 랜덤 파티션으로 흩어짐
@@ -950,7 +950,7 @@ public void sendMessage(@Payload SendMessageRequest request, Principal principal
 장점 2: 서버가 몇 대든 Consumer가 알아서 처리
 장점 3: 저장과 전달이 독립적 → 하나가 느려도 다른 것에 영향 없음
 
-단점: 몇 밀리초(0.00x초) 지연 → 사람은 감지 불가
+단점: Kafka 경유와 fan-out 단계가 추가되므로 send-to-receive 지연 시간은 별도 benchmark로 측정해야 함
 ```
 
 ### Redis Pub/Sub — "사내 방송"
@@ -1258,10 +1258,10 @@ MessagePersistenceConsumer      MessageBroadcastConsumer
 
 ---
 
-# Part 3: 2차 구현 (프로덕션 품질) — 진짜 서비스처럼 만들기
+# Part 3: 2차 구현 (운영 고려사항) — 진짜 서비스에 가까운 제약 다루기
 
 > 1차에서는 **"동작하는 채팅"**을 만들었습니다.
-> 2차에서는 **"실제 서비스로 운영할 수 있는 채팅"**으로 업그레이드합니다.
+> 2차에서는 **"운영에서 자주 만나는 제약을 일부 검증한 채팅"**으로 업그레이드합니다.
 >
 > 비유: 1차 = 시험 주행 성공, 2차 = 안전벨트, 에어백, 속도 제한기, 계기판 장착
 
@@ -1619,11 +1619,14 @@ private DeadLetterPublishingRecoverer deadLetterRecoverer(KafkaTemplate<String, 
 → WebSocketEventListener가 감지
 
 [2단계: 기록]
-Redis에 기록: "user:presence:1" = "ONLINE" (60초 후 자동 삭제)
+Redis에 기록: "user:presence:1:session:{sessionId}" = "ONLINE" (60초 후 자동 삭제)
+Redis set "user:presence:1:sessions"에 sessionId 추가
 → PresenceService가 담당
 
 [3단계: 알림]
 Redis Pub/Sub로 모든 서버에 방송: "1번 유저가 접속했어요!"
+→ 단, 같은 user의 첫 active session일 때만 ONLINE 방송
+→ session 하나가 끊겨도 다른 session이 살아 있으면 OFFLINE 방송 안 함
 → RedisPubSubService가 담당
 
 [4단계: 전달]
@@ -1643,18 +1646,24 @@ public class WebSocketEventListener {
     @EventListener
     public void handleWebSocketConnect(SessionConnectEvent event) {
         Long userId = extractUserId(...);   // "누가 연결한 거야?" → userId=1
-        presenceService.setOnline(userId);  // Redis에 "접속 중" 기록
-        redisPubSubService.publishPresence(PresenceEvent.online(userId));
-        //                                 → 모든 서버에 "1번 유저 접속!" 방송
+        String sessionId = StompHeaderAccessor.wrap(event.getMessage()).getSessionId();
+        boolean becameOnline = presenceService.setOnline(userId, sessionId);
+        if (becameOnline) {
+            redisPubSubService.publishPresence(PresenceEvent.online(userId));
+            // → 첫 active session일 때만 "1번 유저 접속!" 방송
+        }
     }
 
     // 누군가 WebSocket이 끊기면 자동 호출
     @EventListener
     public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
         Long userId = extractUserId(...);
-        presenceService.setOffline(userId);  // Redis에서 "접속 중" 삭제
-        redisPubSubService.publishPresence(PresenceEvent.offline(userId));
-        //                                 → 모든 서버에 "1번 유저 퇴장!" 방송
+        String sessionId = event.getSessionId();
+        boolean becameOffline = presenceService.setOffline(userId, sessionId);
+        if (becameOffline) {
+            redisPubSubService.publishPresence(PresenceEvent.offline(userId));
+            // → 마지막 active session이 끊길 때만 "1번 유저 퇴장!" 방송
+        }
     }
 }
 ```
@@ -1678,27 +1687,33 @@ public class WebSocketEventListener {
 @Service
 public class PresenceService {
 
-    // Redis에 저장하는 키: "user:presence:{userId}"
-    // 값: "ONLINE"
+    // Redis에 저장하는 TTL key: "user:presence:{userId}:session:{sessionId}"
+    // Redis에 저장하는 session set: "user:presence:{userId}:sessions"
     // TTL(유효기간): 60초
 
-    public void setOnline(Long userId) {
-        // Redis: SET "user:presence:1" "ONLINE" EX 60
-        // → 60초 후 자동 삭제!
+    public boolean setOnline(Long userId, String sessionId) {
+        boolean wasOnline = isOnline(userId);
+        // Redis: SET "user:presence:1:session:{sessionId}" "ONLINE" EX 60
+        // Redis: SADD "user:presence:1:sessions" "{sessionId}"
         redisTemplate.opsForValue().set(
-            "user:presence:" + userId, "ONLINE", Duration.ofSeconds(60));
+            "user:presence:" + userId + ":session:" + sessionId,
+            "ONLINE",
+            Duration.ofSeconds(60));
+        redisTemplate.opsForSet().add("user:presence:" + userId + ":sessions", sessionId);
+        redisTemplate.expire("user:presence:" + userId + ":sessions", Duration.ofSeconds(60));
+        return !wasOnline;  // 첫 session이면 true, 추가 session이면 false
     }
 
-    public void setOffline(Long userId) {
-        // Redis: DEL "user:presence:1"
-        // → 즉시 삭제
-        redisTemplate.delete("user:presence:" + userId);
+    public boolean setOffline(Long userId, String sessionId) {
+        // 해당 session만 삭제하고, 살아 있는 session이 없을 때만 true 반환
+        redisTemplate.delete("user:presence:" + userId + ":session:" + sessionId);
+        redisTemplate.opsForSet().remove("user:presence:" + userId + ":sessions", sessionId);
+        return !hasAnyLiveSession(userId); // 마지막 session이면 true
     }
 
     public boolean isOnline(Long userId) {
-        // Redis: EXISTS "user:presence:1"
-        // → 키가 있으면 true(접속 중), 없으면 false(오프라인)
-        return Boolean.TRUE.equals(redisTemplate.hasKey("user:presence:" + userId));
+        // Redis set의 sessionId 중 TTL key가 살아 있으면 true
+        return hasAnyLiveSession(userId);
     }
 
     public Set<Long> getOnlineMembers(Long roomId) {
@@ -1724,14 +1739,15 @@ public class PresenceService {
 → 영원히 "사용 중"으로 표시?!
 
 [TTL로 해결]
-1시간 후 자동으로 "비었음" 표시
-→ 정상 퇴장이든 비정상 퇴장이든, 최대 1시간 후에는 정리됨
+1시간 후 session TTL key가 자동 삭제
+→ 조회할 때 만료된 session은 더 이상 접속 중으로 세지 않음
+→ TTL 만료만으로 "퇴장!" 방송을 자동 발행하는 것은 별도 과제
 
 우리 서비스:
 서버가 갑자기 꺼지면 → SessionDisconnectEvent가 안 나옴
-→ Redis의 "user:presence:1" 키가 삭제되지 않음
+→ Redis의 "user:presence:1:session:{sessionId}" TTL key가 삭제되지 않음
 → BUT! 60초 후 TTL에 의해 자동 삭제!
-→ 최대 60초 후에는 올바르게 "오프라인" 표시
+→ isOnline/getOnlineMembers 조회 기준으로는 offline으로 판단 가능
 ```
 
 **3단계 + 4단계: 서버 간 상태 공유 + 클라이언트 전달**
@@ -1920,7 +1936,7 @@ chat.messages 토픽 (파티션 6개)
 파티션 2, 3 → 서버2
 파티션 4, 5 → 서버3
 
-→ 서버만 추가하면 자동으로 부하 분산!
+→ 파티션 수와 consumer group 조건 안에서 부하 분산!
 → 이게 Kafka Consumer Group의 핵심 가치!
 → 단, 파티션 수(6) 이상의 서버는 의미 없음 (노는 서버 발생)
 ```
@@ -1984,23 +2000,28 @@ void presenceOnlineOffline() {
     assertThat(presenceService.isOnline(user1Id)).isFalse();
 
     // 온라인으로 설정
-    presenceService.setOnline(user1Id);
+    presenceService.setOnline(user1Id, "s1");
     assertThat(presenceService.isOnline(user1Id)).isTrue();  // 온라인이어야 함!
 
-    // 다시 오프라인으로 설정
-    presenceService.setOffline(user1Id);
+    // 같은 user가 두 session을 쓰면 session 하나가 끊겨도 여전히 온라인
+    presenceService.setOnline(user1Id, "s2");
+    assertThat(presenceService.setOffline(user1Id, "s1")).isFalse();
+    assertThat(presenceService.isOnline(user1Id)).isTrue();
+
+    // 마지막 session이 끊기면 오프라인
+    assertThat(presenceService.setOffline(user1Id, "s2")).isTrue();
     assertThat(presenceService.isOnline(user1Id)).isFalse(); // 오프라인이어야 함!
 }
 
 @Test
 @DisplayName("채팅방에서 누가 접속 중인지 조회")
 void getOnlineMembers() {
-    presenceService.setOnline(user1Id);         // user1만 온라인
+    presenceService.setOnline(user1Id, "s1");   // user1만 온라인
 
     Set<Long> online = presenceService.getOnlineMembers(roomId);
     assertThat(online).containsExactly(user1Id); // user1만 있어야 함!
 
-    presenceService.setOnline(user2Id);         // user2도 온라인
+    presenceService.setOnline(user2Id, "s1");   // user2도 온라인
 
     online = presenceService.getOnlineMembers(roomId);
     assertThat(online).containsExactlyInAnyOrder(user1Id, user2Id);
@@ -2146,7 +2167,8 @@ After:  채팅방 10개 → DB 쿼리 1개 (+ 캐시 히트 시 0개)
 4. 채팅방 목록용 (user_id): "이 유저의 채팅방 목록"
 5. 발신자 조회용 (sender_id): 관리/검색 기능용
 
-모든 주요 쿼리가 인덱스를 사용하는 것을 EXPLAIN ANALYZE로 확인 완료
+대표 조회 경로는 인덱스 사용 여부를 확인해야 합니다.
+현재 공개 성능 주장은 PERF_RESULT.md에 남긴 k6 결과와 쿼리 개선 범위로 한정합니다.
 ```
 
 ---
@@ -2182,7 +2204,7 @@ After:  채팅방 10개 → DB 쿼리 1개 (+ 캐시 히트 시 0개)
 │ 총 처리량     │  67,417  │ 118,900  │  +76%   │
 └──────────────┴──────────┴──────────┴──────────┘
 
-WebSocket: 579 동시 세션, 2대 스케일아웃 시 1,158 세션 (2배)
+WebSocket: 579 동시 세션, 두 인스턴스 local smoke 합산 1,158 세션 (선형 확장 claim 아님)
 ```
 
 > 자세한 분석은 [성능 최적화 기록](PERF_RESULT.md)을 참고하세요.
@@ -2210,15 +2232,17 @@ DB(PostgreSQL)는 원래 여러 프로그램이 동시에 접근하도록 설계
 ### Q: Redis가 죽으면 서비스도 죽어?
 
 ```
-A: 아니요! 느려지지만 죽지는 않아요.
+A: 일부 기능은 느려지고, 일부 기능은 제한됩니다.
 
 Redis가 하는 일:
 1. Pub/Sub (서버 간 방송) → Redis 없으면 다른 서버로 메시지 전달 불가
 2. 캐시 (안읽은 수) → Redis 없으면 매번 DB 조회 (느리지만 동작)
 3. Presence (접속 상태) → Redis 없으면 접속 상태 표시 불가
+4. SEND rate limit → Redis 장애 시 fail-closed로 전송을 거부
 
 핵심 데이터(메시지, 유저, 채팅방)는 전부 DB에 있으므로:
-→ Redis가 죽어도 "느린 채팅"은 가능
+→ 기존 메시지 조회 같은 DB 기반 기능은 복구 기준이 남음
+→ 다중 인스턴스 실시간 fan-out, presence, SEND rate limit은 영향을 받음
 → 물론 Redis가 죽으면 빨리 고쳐야 함!
 ```
 

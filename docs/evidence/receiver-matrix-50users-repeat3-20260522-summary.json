@@ -1,0 +1,89 @@
+{
+  "scenario": "receiver-matrix-50users-10mps-repeat3-local",
+  "date": "2026-05-22",
+  "runtime": "Docker Compose app-1/app-2",
+  "sourceArtifactRoot": "artifacts/ws/20260522T114435Z-receiver-matrix-50users-repeat3",
+  "roomUsers": 50,
+  "senders": 5,
+  "messagesPerSender": 20,
+  "sendIntervalMs": 100,
+  "runs": [
+    {
+      "run": 1,
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "acceptedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 18,
+        "p90": 25,
+        "p95": 38,
+        "p99": 127,
+        "max": 229
+      },
+      "senderLocalOutOfOrderCount": 23
+    },
+    {
+      "run": 2,
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "acceptedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 16,
+        "p90": 21,
+        "p95": 23,
+        "p99": 36,
+        "max": 47
+      },
+      "senderLocalOutOfOrderCount": 0
+    },
+    {
+      "run": 3,
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "acceptedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 16,
+        "p90": 22,
+        "p95": 24,
+        "p99": 27,
+        "max": 32
+      },
+      "senderLocalOutOfOrderCount": 0
+    }
+  ],
+  "aggregate": {
+    "runs": 3,
+    "totalSends": 300,
+    "totalExpectedDeliveries": 14700,
+    "totalActualUniqueDeliveries": 14700,
+    "totalMissingDeliveries": 0,
+    "totalDuplicateDeliveries": 0,
+    "totalUnexpectedDeliveries": 0,
+    "completenessPercentEachRun": 100,
+    "latencyP50RangeMs": "16-18",
+    "latencyP95RangeMs": "23-38",
+    "latencyP99RangeMs": "27-127"
+  },
+  "claimBoundary": "Three local receiver-matrix runs on Docker Compose app-1/app-2. This is scenario verification, not a production performance claim, 500/1000-session benchmark, mixed traffic p95 claim, or room-global ordering claim."
+}

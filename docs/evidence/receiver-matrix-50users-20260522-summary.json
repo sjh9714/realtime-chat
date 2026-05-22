@@ -1,0 +1,29 @@
+{
+  "scenario": "receiver-matrix-50users-10mps-local",
+  "date": "2026-05-22",
+  "runtime": "Docker Compose app-1/app-2",
+  "roomUsers": 50,
+  "senders": 5,
+  "messagesPerSender": 20,
+  "sendIntervalMs": 100,
+  "totalSends": 100,
+  "acceptedSends": 100,
+  "failedSends": 0,
+  "statuslessSends": 0,
+  "expectedDeliveries": 4900,
+  "actualUniqueDeliveries": 4900,
+  "missingDeliveries": 0,
+  "duplicateDeliveries": 0,
+  "unexpectedDeliveries": 0,
+  "completenessPercent": 100,
+  "latencyMs": {
+    "count": 4900,
+    "p50": 18,
+    "p90": 27,
+    "p95": 31,
+    "p99": 139,
+    "max": 239
+  },
+  "senderLocalOutOfOrderCount": 3,
+  "claimBoundary": "Single local receiver-matrix run. Not a repeated benchmark, production performance claim, or room-global ordering claim."
+}

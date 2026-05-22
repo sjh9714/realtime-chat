@@ -6,8 +6,13 @@ import com.realtime.chat.dto.MessagePersistedNotification;
 import com.realtime.chat.dto.MessagePersistedResponse;
 import com.realtime.chat.dto.PresenceEvent;
 import com.realtime.chat.event.ChatMessageEvent;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
+import java.time.Duration;
+import java.time.Instant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -21,6 +26,10 @@ public class RedisPubSubService {
   private final StringRedisTemplate redisTemplate;
   private final SimpMessagingTemplate messagingTemplate;
   private final ObjectMapper objectMapper;
+  @Qualifier("messagesReceivedCounter")
+  private final Counter messagesReceivedCounter;
+  @Qualifier("roomFanoutLatencyTimer")
+  private final Timer roomFanoutLatencyTimer;
 
   // Redis 채널에 메시지 발행 (Kafka Consumer → Redis)
   public void publish(ChatMessageEvent event) {
@@ -95,12 +104,14 @@ public class RedisPubSubService {
 
   // Redis 구독 메시지 수신 → STOMP로 WebSocket 클라이언트에게 브로드캐스트
   public void onMessage(String message, String channel) {
+    Instant startedAt = Instant.now();
     try {
       ChatMessageEvent event = objectMapper.readValue(message, ChatMessageEvent.class);
-      String roomId = channel.replace(RedisConfig.CHAT_ROOM_CHANNEL_PREFIX, "");
-      String destination = "/topic/room." + roomId;
+      String destination = "/topic/room." + event.getRoomId();
 
       messagingTemplate.convertAndSend(destination, event);
+      messagesReceivedCounter.increment();
+      roomFanoutLatencyTimer.record(Duration.between(startedAt, Instant.now()));
       log.debug(
           "WebSocket 브로드캐스트: destination={}, messageKey={}", destination, event.getMessageKey());
     } catch (Exception e) {

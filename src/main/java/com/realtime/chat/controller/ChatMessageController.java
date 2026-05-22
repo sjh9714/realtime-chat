@@ -15,6 +15,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -33,6 +34,7 @@ public class ChatMessageController {
   private final ChatMessageProducer chatMessageProducer;
   private final ChatRoomMemberRepository chatRoomMemberRepository;
   private final UserRepository userRepository;
+  @Qualifier("messagesSentCounter")
   private final Counter messagesSentCounter;
   private final SimpMessagingTemplate messagingTemplate;
 

@@ -22,7 +22,7 @@
 12. [메시지 전체 흐름 따라가기](#12-메시지-전체-흐름-따라가기)
 13. [자주 묻는 질문](#13-자주-묻는-질문)
 
-### 2차: 프로덕션 품질
+### 2차: 운영 고려사항
 14. [STEP 9: Health Check + Graceful Shutdown](#14-step-9-health-check--graceful-shutdown)
 15. [STEP 10: Rate Limiting](#15-step-10-rate-limiting)
 16. [STEP 11: Consumer DLT 심화](#16-step-11-consumer-dlt-심화)
@@ -35,7 +35,7 @@
 
 ### 한 줄 요약
 
-> 사용자가 채팅 메시지를 보내면, **Kafka**가 순서를 보장하며 전달하고, **Redis**가 모든 서버에 뿌리고, **WebSocket**으로 실시간 수신한다.
+> 사용자가 채팅 메시지를 보내면, **Kafka**는 room key 기준 이벤트를 보관하고, **Redis Pub/Sub**은 현재 연결된 app instance로 best-effort fan-out을 수행하며, **WebSocket**은 연결된 사용자에게 전달을 시도한다.
 
 ### 전체 흐름 (쉬운 버전)
 
@@ -66,7 +66,7 @@
 - 서버 2대: 사용자 A는 서버1에, 사용자 B는 서버2에 연결되어 있다면? → **서버 간 통신이 필요**
 
 이 문제를 해결하기 위해:
-- **Kafka**: 메시지를 중앙에서 관리하고, 순서를 보장
+- **Kafka**: `roomId` key 기준 같은 partition 안의 offset 순서를 제공
 - **Redis Pub/Sub**: 모든 서버에 메시지를 브로드캐스트
 - **WebSocket**: 서버→클라이언트 실시간 전달
 
@@ -134,8 +134,8 @@ A → 직접 B에게 전달
 문제: B가 잠깐 꺼져있으면? 메시지 유실!
 
 [Kafka 방식]
-A → Kafka(우체국)에 맡김 → Kafka가 B에게 배달
-장점: B가 꺼져있어도 Kafka가 보관하고 있다가, B가 켜지면 배달
+A → Kafka(우체국)에 맡김 → consumer가 room 이벤트를 처리
+장점: consumer가 잠시 실패해도 Kafka에 남은 이벤트를 기준으로 재처리할 수 있음
 ```
 
 핵심 용어:
@@ -452,7 +452,7 @@ validate:      Entity와 테이블이 맞는지만 확인 (우리 선택)
 none:          아무것도 안 함
 
 → validate를 쓰고, 테이블은 Flyway migration으로 버전 관리
-→ 프로덕션에서는 이 방식이 안전함
+→ 운영 환경에서 더 안전한 방향이며, 권한/감사/모니터링은 별도 필요
 ```
 
 ### Flyway migration — 테이블 생성
@@ -1087,8 +1087,8 @@ public class ChatMessageController {
 
 [Kafka 경유 방식]
 클라이언트A → 서버 → Kafka → Consumer1(DB 저장) + Consumer2(브로드캐스트)
-장점: Kafka가 순서를 보장, 모든 처리가 동일한 순서로 진행
-단점: 약간의 지연 (수 ms) → 채팅에서는 감지 안 될 정도
+장점: 같은 roomId 메시지를 같은 partition으로 보내 순서 해석 범위를 좁힘
+단점: Kafka 경유와 fan-out 단계가 추가되므로 send-to-receive latency는 아직 추가 측정 예정
 ```
 
 ### RedisPubSubService.java — 서버 간 브로드캐스트
@@ -1267,7 +1267,7 @@ public int getUnreadCount(Long roomId, Long userId) {
 
 [Redis 장애 시]
 Redis가 죽어도 DB에 데이터 있으므로 서비스 가능
-Redis는 순수 캐시 역할 → 장애 시 데이터 정합성 보장
+영속 데이터 기준 정합성은 DB에 두고, Redis 장애 시 기능 저하/복구 정책은 별도 검증 필요
 ```
 
 ---
@@ -1633,10 +1633,10 @@ Consumer Group을 분리하면:
 
 ---
 
-# 2차: 프로덕션 품질
+# 2차: 운영 고려사항
 
-> 1차(MVP)에서 "동작하는 코드"를 만들었다면, 2차에서는 **"운영 가능한 코드"**로 발전시킵니다.
-> 실제 서비스에서 필요한 안정성, 보호, 모니터링, 스케일아웃을 추가합니다.
+> 1차(MVP)에서 "동작하는 코드"를 만들었다면, 2차에서는 **운영에서 자주 만나는 제약**을 일부 다룹니다.
+> 실제 서비스에 필요한 안정성, 보호, 모니터링, 스케일아웃 중 이 프로젝트에서 검증한 범위를 설명합니다.
 
 ---
 
@@ -1980,9 +1980,13 @@ SessionConnectEvent 발생
     ▼
 [WebSocketEventListener]
     │
-    ├── PresenceService.setOnline(userId)     → Redis에 "user:presence:1" = "ONLINE" (TTL 60초)
+    ├── boolean becameOnline = PresenceService.setOnline(userId, sessionId)
+    │       → Redis에 "user:presence:1:session:{sessionId}" = "ONLINE" (TTL 60초)
+    │       → Redis set "user:presence:1:sessions"에 sessionId 기록
     │
-    └── RedisPubSubService.publishPresence()  → Redis "chat:presence" 채널에 발행
+    └── becameOnline이면 RedisPubSubService.publishPresence()
+            → 같은 user의 추가 session은 ONLINE 이벤트를 다시 발행하지 않음
+            → Redis "chat:presence" 채널에 발행
             │
             ▼
     [모든 서버 인스턴스]
@@ -2022,24 +2026,40 @@ public class PresenceEvent {
 public class PresenceService {
 
     private static final String PRESENCE_KEY_PREFIX = "user:presence:";
+    private static final String SESSION_SET_SUFFIX = ":sessions";
+    private static final String SESSION_KEY_PART = ":session:";
     private static final Duration PRESENCE_TTL = Duration.ofSeconds(60);  // TTL 60초
 
-    // 온라인 설정: Redis에 키 생성 + TTL
-    public void setOnline(Long userId) {
-        String key = PRESENCE_KEY_PREFIX + userId;      // "user:presence:1"
-        redisTemplate.opsForValue().set(key, "ONLINE", PRESENCE_TTL);
+    // 온라인 설정: session TTL key 생성 + user별 session set 기록
+    // true면 offline → online 전환이므로 presence event를 발행할 수 있다.
+    public boolean setOnline(Long userId, String sessionId) {
+        boolean wasOnline = isOnline(userId);
+        String sessionKey = PRESENCE_KEY_PREFIX + userId + SESSION_KEY_PART + sessionId;
+        String sessionSetKey = PRESENCE_KEY_PREFIX + userId + SESSION_SET_SUFFIX;
+        redisTemplate.opsForValue().set(sessionKey, "ONLINE", PRESENCE_TTL);
+        redisTemplate.opsForSet().add(sessionSetKey, sessionId);
+        redisTemplate.expire(sessionSetKey, PRESENCE_TTL);
+        return !wasOnline;
     }
 
-    // 오프라인 설정: Redis에서 키 삭제
-    public void setOffline(Long userId) {
-        String key = PRESENCE_KEY_PREFIX + userId;
-        redisTemplate.delete(key);
+    // 오프라인 설정: 해당 session만 제거
+    // true면 마지막 session이 끊긴 것이므로 OFFLINE 이벤트를 발행할 수 있다.
+    public boolean setOffline(Long userId, String sessionId) {
+        String sessionKey = PRESENCE_KEY_PREFIX + userId + SESSION_KEY_PART + sessionId;
+        String sessionSetKey = PRESENCE_KEY_PREFIX + userId + SESSION_SET_SUFFIX;
+        redisTemplate.delete(sessionKey);
+        redisTemplate.opsForSet().remove(sessionSetKey, sessionId);
+        boolean hasActiveSession = !activeSessionIds(userId).isEmpty();
+        if (!hasActiveSession) {
+            redisTemplate.delete(sessionSetKey);
+            return true;
+        }
+        return false;
     }
 
-    // 온라인 여부 확인: 키가 존재하면 온라인
+    // 온라인 여부 확인: 살아 있는 session TTL key가 하나라도 있으면 온라인
     public boolean isOnline(Long userId) {
-        String key = PRESENCE_KEY_PREFIX + userId;
-        return Boolean.TRUE.equals(redisTemplate.hasKey(key));
+        return !activeSessionIds(userId).isEmpty();
     }
 
     // 채팅방 멤버 중 온라인인 유저 목록
@@ -2060,12 +2080,14 @@ public class PresenceService {
 ```
 [문제] 서버가 비정상 종료되면?
 → SessionDisconnectEvent가 발생하지 않음
-→ Redis에 "user:presence:1" = "ONLINE"이 영원히 남음
+→ Redis에 "user:presence:1:session:{sessionId}" = "ONLINE"이 영원히 남을 수 있음
 → 오프라인인데 온라인으로 표시!
 
 [해결] TTL 60초
-→ 60초 후 자동 삭제 → 오프라인으로 자동 전환
-→ 정상 연결 중이면? heartbeat로 TTL 갱신 (아직 미구현, 3차 예정)
+→ 60초 후 session TTL key가 자동 삭제
+→ isOnline/getOnlineMembers 조회 시 만료된 sessionId를 정리하고 offline으로 판단 가능
+→ 정상 연결 중이면 /app/presence.heartbeat로 현재 session TTL 갱신
+→ 단, TTL 만료 이벤트만으로 OFFLINE broadcast를 자동 발행하지는 않음
 
 비유: 출석 체크
 "60초 안에 한 번은 출석 체크해야 함"
@@ -2083,8 +2105,11 @@ public class WebSocketEventListener {
     public void handleWebSocketConnect(SessionConnectEvent event) {
         Long userId = extractUserId(event.getMessage().getHeaders().get("simpUser"));
         if (userId != null) {
-            presenceService.setOnline(userId);                          // Redis 설정
-            redisPubSubService.publishPresence(PresenceEvent.online(userId));  // 브로드캐스트
+            String sessionId = StompHeaderAccessor.wrap(event.getMessage()).getSessionId();
+            boolean becameOnline = presenceService.setOnline(userId, sessionId); // session 기록
+            if (becameOnline) {
+                redisPubSubService.publishPresence(PresenceEvent.online(userId));  // 첫 session만 브로드캐스트
+            }
         }
     }
 
@@ -2093,8 +2118,11 @@ public class WebSocketEventListener {
     public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
         Long userId = extractUserId(event.getUser());
         if (userId != null) {
-            presenceService.setOffline(userId);                          // Redis 삭제
-            redisPubSubService.publishPresence(PresenceEvent.offline(userId));  // 브로드캐스트
+            String sessionId = event.getSessionId();
+            boolean becameOffline = presenceService.setOffline(userId, sessionId); // 해당 session 삭제
+            if (becameOffline) {
+                redisPubSubService.publishPresence(PresenceEvent.offline(userId)); // 마지막 session만 브로드캐스트
+            }
         }
     }
 
@@ -2185,8 +2213,11 @@ public void onPresenceMessage(String message, String channel) {
 
 [서버 1]
 SessionConnectEvent → WebSocketEventListener
-    → PresenceService.setOnline(1)         → Redis: SET user:presence:1 "ONLINE" EX 60
-    → RedisPubSubService.publishPresence() → Redis: PUBLISH "chat:presence" {...}
+    → PresenceService.setOnline(1, sessionId)
+        → Redis: SET user:presence:1:session:{sessionId} "ONLINE" EX 60
+        → Redis: SADD user:presence:1:sessions {sessionId}
+    → becameOnline일 때만 RedisPubSubService.publishPresence()
+        → Redis: PUBLISH "chat:presence" {...}
 
 [Redis Pub/Sub]
 "chat:presence" 채널에 메시지 발행
@@ -2356,7 +2387,7 @@ Partition 0,1,2 → 서버1(app-1)의 Consumer
 Partition 3,4,5 → 서버2(app-2)의 Consumer
 
 같은 Consumer Group 내에서 Kafka가 자동으로 파티션을 분배!
-→ 코드 변경 없이 서버만 추가하면 자동 스케일아웃
+→ 파티션 수와 Consumer Group 조건 안에서 부하 분산
 → 이게 Kafka Consumer Group의 핵심 가치
 ```
 
@@ -2434,26 +2465,31 @@ class PresenceIntegrationTest extends BaseIntegrationTest {
         // 처음에는 오프라인
         assertThat(presenceService.isOnline(user1Id)).isFalse();
 
-        // 온라인 설정 (Redis에 키 생성)
-        presenceService.setOnline(user1Id);
+        // 온라인 설정 (Redis에 session TTL key 생성)
+        presenceService.setOnline(user1Id, "s1");
         assertThat(presenceService.isOnline(user1Id)).isTrue();
 
-        // 오프라인 설정 (Redis에서 키 삭제)
-        presenceService.setOffline(user1Id);
+        // 같은 user의 두 번째 session은 user-level ONLINE 전환이 아니다.
+        presenceService.setOnline(user1Id, "s2");
+        assertThat(presenceService.setOffline(user1Id, "s1")).isFalse();
+        assertThat(presenceService.isOnline(user1Id)).isTrue();
+
+        // 마지막 session이 끊길 때 user-level OFFLINE 전환이다.
+        assertThat(presenceService.setOffline(user1Id, "s2")).isTrue();
         assertThat(presenceService.isOnline(user1Id)).isFalse();
     }
 
     @Test
     @DisplayName("채팅방 멤버 중 온라인 유저 조회")
     void getOnlineMembers() {
-        presenceService.setOnline(user1Id);
+        presenceService.setOnline(user1Id, "s1");
 
         // user1만 온라인
         Set<Long> onlineMembers = presenceService.getOnlineMembers(roomId);
         assertThat(onlineMembers).containsExactly(user1Id);
 
         // user2도 온라인
-        presenceService.setOnline(user2Id);
+        presenceService.setOnline(user2Id, "s1");
         onlineMembers = presenceService.getOnlineMembers(roomId);
         assertThat(onlineMembers).containsExactlyInAnyOrder(user1Id, user2Id);
 

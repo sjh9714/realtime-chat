@@ -21,7 +21,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -29,13 +28,15 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class ChatRoomServiceTest {
 
-  @InjectMocks private ChatRoomService chatRoomService;
-
   @Mock private ChatRoomRepository chatRoomRepository;
 
   @Mock private ChatRoomMemberRepository chatRoomMemberRepository;
 
   @Mock private UserRepository userRepository;
+
+  private ChatRoomService chatRoomService() {
+    return new ChatRoomService(chatRoomRepository, chatRoomMemberRepository, userRepository);
+  }
 
   private User createUser(Long id, String email, String nickname) {
     User user = new User(email, "encoded", nickname);
@@ -64,7 +65,7 @@ class ChatRoomServiceTest {
               return room;
             });
 
-    ChatRoomResponse response = chatRoomService.createDirectRoom(1L, request);
+    ChatRoomResponse response = chatRoomService().createDirectRoom(1L, request);
 
     assertThat(response.getType()).isEqualTo(RoomType.DIRECT);
     assertThat(response.getMembers()).hasSize(2);
@@ -76,7 +77,7 @@ class ChatRoomServiceTest {
     CreateDirectRoomRequest request = new CreateDirectRoomRequest();
     ReflectionTestUtils.setField(request, "targetUserId", 1L);
 
-    assertThatThrownBy(() -> chatRoomService.createDirectRoom(1L, request))
+    assertThatThrownBy(() -> chatRoomService().createDirectRoom(1L, request))
         .isInstanceOf(BusinessException.class)
         .hasMessage("자기 자신과의 채팅방은 생성할 수 없습니다.");
   }
@@ -99,10 +100,11 @@ class ChatRoomServiceTest {
               return room;
             });
 
-    ChatRoomResponse response = chatRoomService.createGroupRoom(1L, request);
+    ChatRoomResponse response = chatRoomService().createGroupRoom(1L, request);
 
     assertThat(response.getName()).isEqualTo("테스트 그룹");
     assertThat(response.getType()).isEqualTo(RoomType.GROUP);
     assertThat(response.getMembers()).hasSize(1);
   }
+
 }

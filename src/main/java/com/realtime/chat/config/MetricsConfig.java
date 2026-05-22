@@ -29,6 +29,34 @@ public class MetricsConfig {
   }
 
   @Bean
+  public Counter messagesReceivedCounter(MeterRegistry registry) {
+    return Counter.builder("chat.messages.received")
+        .description("Redis room channel 수신 후 WebSocket room topic으로 브로드캐스트한 메시지 수")
+        .register(registry);
+  }
+
+  @Bean
+  public Counter dltRoutedCounter(MeterRegistry registry) {
+    return Counter.builder("chat.messages.dlt.routed")
+        .description("Kafka retry 초과 후 DLT recoverer가 라우팅한 메시지 수")
+        .register(registry);
+  }
+
+  @Bean
+  public Counter dltReplayCounter(MeterRegistry registry) {
+    return Counter.builder("chat.messages.dlt.replayed")
+        .description("DLT manual replay 재발행 성공 수")
+        .register(registry);
+  }
+
+  @Bean
+  public Counter roomsCacheEvictionsCounter(MeterRegistry registry) {
+    return Counter.builder("chat.rooms.cache.evictions")
+        .description("채팅방 목록 cache entry evict 수")
+        .register(registry);
+  }
+
+  @Bean
   public AtomicInteger websocketSessionGauge(MeterRegistry registry) {
     AtomicInteger sessions = new AtomicInteger(0);
     registry.gauge("chat.websocket.sessions", sessions);
@@ -39,6 +67,13 @@ public class MetricsConfig {
   public Timer messagesLatencyTimer(MeterRegistry registry) {
     return Timer.builder("chat.messages.latency")
         .description("Kafka 발행 → DB 저장 지연시간")
+        .register(registry);
+  }
+
+  @Bean
+  public Timer roomFanoutLatencyTimer(MeterRegistry registry) {
+    return Timer.builder("chat.room.fanout.latency")
+        .description("Redis room channel 수신 → WebSocket room topic 브로드캐스트 처리 시간")
         .register(registry);
   }
 }

@@ -56,6 +56,8 @@ class MessagePersistenceConsumerCacheTest {
 
   @Mock private Timer messagesLatencyTimer;
 
+  @Mock private Counter roomsCacheEvictionsCounter;
+
   @Mock private CacheManager cacheManager;
 
   @Mock private Cache roomsCache;
@@ -108,6 +110,7 @@ class MessagePersistenceConsumerCacheTest {
     verify(roomsCache).evict(11L);
     verify(roomsCache, never()).evict(99L);
     verify(roomsCache, never()).clear();
+    verify(roomsCacheEvictionsCounter, org.mockito.Mockito.times(2)).increment();
     verify(acknowledgment).acknowledge();
   }
 
@@ -258,6 +261,7 @@ class MessagePersistenceConsumerCacheTest {
         messagesPersistedCounter,
         messagesFailedCounter,
         messagesLatencyTimer,
+        roomsCacheEvictionsCounter,
         cacheManager,
         redisPubSubService);
   }

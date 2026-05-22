@@ -2,10 +2,12 @@ package com.realtime.chat.service;
 
 import com.realtime.chat.config.KafkaConfig;
 import com.realtime.chat.event.ChatMessageEvent;
+import io.micrometer.core.instrument.Counter;
 import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,8 @@ import org.springframework.stereotype.Service;
 public class DltReplayService {
 
   private final KafkaTemplate<String, Object> kafkaTemplate;
+  @Qualifier("dltReplayCounter")
+  private final Counter dltReplayCounter;
 
   public CompletableFuture<SendResult<String, Object>> replayMessage(
       ConsumerRecord<String, ChatMessageEvent> dltRecord) {
@@ -51,6 +55,7 @@ public class DltReplayService {
             return;
           }
 
+          dltReplayCounter.increment();
           log.info(
               "DLT 메시지 replay 성공: messageKey={}, dltTopic={}, dltPartition={}, dltOffset={},"
                   + " targetTopic={}, key={}, targetPartition={}, targetOffset={}",
@@ -60,8 +65,8 @@ public class DltReplayService {
               dltRecord.offset(),
               KafkaConfig.MESSAGES_TOPIC,
               key,
-              result.getRecordMetadata().partition(),
-              result.getRecordMetadata().offset());
+              result != null ? result.getRecordMetadata().partition() : null,
+              result != null ? result.getRecordMetadata().offset() : null);
         });
 
     return future;
@@ -90,14 +95,15 @@ public class DltReplayService {
             return;
           }
 
+          dltReplayCounter.increment();
           log.info(
               "DLT 메시지 replay 성공: messageKey={}, targetTopic={}, key={}, targetPartition={},"
                   + " targetOffset={}",
               event.getMessageKey(),
               KafkaConfig.MESSAGES_TOPIC,
               key,
-              result.getRecordMetadata().partition(),
-              result.getRecordMetadata().offset());
+              result != null ? result.getRecordMetadata().partition() : null,
+              result != null ? result.getRecordMetadata().offset() : null);
         });
 
     return future;

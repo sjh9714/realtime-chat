@@ -1,5 +1,6 @@
 package com.realtime.chat.config;
 
+import io.micrometer.core.instrument.Counter;
 import java.util.HashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
@@ -7,6 +8,7 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -70,10 +72,11 @@ public class KafkaConfig {
 
   // DLT Recoverer: 재시도 실패 시 원본 토픽 + ".dlt" 토픽으로 전송
   private DeadLetterPublishingRecoverer deadLetterRecoverer(
-      KafkaTemplate<String, Object> kafkaTemplate) {
+      KafkaTemplate<String, Object> kafkaTemplate, Counter dltRoutedCounter) {
     return new DeadLetterPublishingRecoverer(
         kafkaTemplate,
         (ConsumerRecord<?, ?> record, Exception ex) -> {
+          dltRoutedCounter.increment();
           log.error(
               "DLT 전송: topic={}, partition={}, offset={}, error={}",
               record.topic(),
@@ -88,26 +91,29 @@ public class KafkaConfig {
   // DB 저장용 Consumer (Group 1)
   @Bean
   public ConcurrentKafkaListenerContainerFactory<String, Object> persistenceListenerFactory(
-      KafkaTemplate<String, Object> kafkaTemplate) {
-    return createListenerFactory("chat-persistence", kafkaTemplate);
+      KafkaTemplate<String, Object> kafkaTemplate,
+      @Qualifier("dltRoutedCounter") Counter dltRoutedCounter) {
+    return createListenerFactory("chat-persistence", kafkaTemplate, dltRoutedCounter);
   }
 
   // 브로드캐스트용 Consumer (Group 2)
   @Bean
   public ConcurrentKafkaListenerContainerFactory<String, Object> broadcastListenerFactory(
-      KafkaTemplate<String, Object> kafkaTemplate) {
-    return createListenerFactory("chat-broadcast", kafkaTemplate);
+      KafkaTemplate<String, Object> kafkaTemplate,
+      @Qualifier("dltRoutedCounter") Counter dltRoutedCounter) {
+    return createListenerFactory("chat-broadcast", kafkaTemplate, dltRoutedCounter);
   }
 
   // 읽음 처리용 Consumer
   @Bean
   public ConcurrentKafkaListenerContainerFactory<String, Object> readReceiptListenerFactory(
-      KafkaTemplate<String, Object> kafkaTemplate) {
-    return createListenerFactory("chat-read-receipt", kafkaTemplate);
+      KafkaTemplate<String, Object> kafkaTemplate,
+      @Qualifier("dltRoutedCounter") Counter dltRoutedCounter) {
+    return createListenerFactory("chat-read-receipt", kafkaTemplate, dltRoutedCounter);
   }
 
   private ConcurrentKafkaListenerContainerFactory<String, Object> createListenerFactory(
-      String groupId, KafkaTemplate<String, Object> kafkaTemplate) {
+      String groupId, KafkaTemplate<String, Object> kafkaTemplate, Counter dltRoutedCounter) {
     ConsumerFactory<String, Object> consumerFactory =
         new DefaultKafkaConsumerFactory<>(consumerConfigs(groupId));
 
@@ -118,7 +124,8 @@ public class KafkaConfig {
 
     // 3회 재시도 후 DLT로 격리
     DefaultErrorHandler errorHandler =
-        new DefaultErrorHandler(deadLetterRecoverer(kafkaTemplate), new FixedBackOff(1000L, 3));
+        new DefaultErrorHandler(
+            deadLetterRecoverer(kafkaTemplate, dltRoutedCounter), new FixedBackOff(1000L, 3));
     factory.setCommonErrorHandler(errorHandler);
 
     return factory;

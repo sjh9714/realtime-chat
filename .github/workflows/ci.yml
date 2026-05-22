@@ -25,12 +25,22 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Check whitespace in latest change
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" --depth=1
-            git diff --check "origin/${{ github.base_ref }}...HEAD"
+            git fetch origin "${{ github.base_ref }}" --depth=1000
+            if git merge-base "origin/${{ github.base_ref }}" HEAD >/dev/null; then
+              git diff --check "origin/${{ github.base_ref }}...HEAD"
+            else
+              echo "No merge base found; checking latest commit for whitespace."
+              git diff-tree --check --no-commit-id -r HEAD
+            fi
           else
             git diff-tree --check --no-commit-id --root -r HEAD
           fi
@@ -46,6 +56,7 @@ jobs:
               + list(Path(".github").rglob("*.yml"))
               + list(Path(".github").rglob("*.yaml"))
               + list(Path("k6").rglob("*.js"))
+              + list(Path("scripts").rglob("*.mjs"))
           )
 
           bad = []
@@ -67,8 +78,70 @@ jobs:
           print(f"OK: checked {len(targets)} files")
           PY
 
+      - name: Check docs evidence policy
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          sources = [
+              Path("README.md"),
+              Path("docs/PERF_RESULT.md"),
+              Path("docs/WEBSOCKET_MEASUREMENT.md"),
+              Path("docs/REDIS_LIMITATIONS.md"),
+          ]
+          text = "\n".join(path.read_text(encoding="utf-8") for path in sources)
+
+          banned_terms = [
+              "스모크 확인",
+              "시나리오 추가",
+          ]
+          for term in banned_terms:
+              if term in text:
+                  raise SystemExit(f"Use measured/verified/pending taxonomy instead of: {term}")
+
+          pending_metrics = [
+              "send-to-receive",
+              "delivery completeness",
+              "mixed traffic p95",
+              "cache hit rate",
+              "room-global ordering",
+          ]
+          for line in text.splitlines():
+              if "| 측정 완료 |" not in line:
+                  continue
+              lower = line.lower()
+              for metric in pending_metrics:
+                  if metric in lower:
+                      raise SystemExit(
+                          f"Pending metric promoted to measured: {line}"
+                      )
+
+          required_pending = [
+              "1,000 session send-to-receive latency | benchmark 미측정",
+              "1,000 session delivery completeness | benchmark 미측정",
+              "mixed traffic p95 latency | benchmark 미측정",
+              "mixed traffic cache hit rate는 추가 측정 예정",
+          ]
+          for phrase in required_pending:
+              if phrase not in text:
+                  raise SystemExit(f"Missing pending boundary phrase: {phrase}")
+
+          print("Docs evidence policy check passed")
+          PY
+
       - name: Run tests
         run: ./gradlew test
+
+      - name: Check measurement scripts
+        run: |
+          node --check scripts/ws-delivery-runner.mjs
+          node --check scripts/delivery-matrix.mjs
+          node --check scripts/delivery-matrix-smoke-test.mjs
+          node --check scripts/validate-delivery-evidence.mjs
+          node --check scripts/delivery-evidence-validator-smoke-test.mjs
+          node scripts/delivery-matrix-smoke-test.mjs
+          node scripts/delivery-evidence-validator-smoke-test.mjs
 
       - name: Build
         run: ./gradlew build

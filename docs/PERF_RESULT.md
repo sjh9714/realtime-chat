@@ -511,7 +511,7 @@ $ redis-cli TTL "rooms::1"
 | 총 처리량 | 67,417 | 118,900 | **+76.4%** |
 
 **분석:**
-- **처리량 70% 증가:** Before 67,417건 → After 118,900건. 동일 50초에 76% 더 많은 요청을 처리
+- **RPS 70.5% 증가:** 937 RPS → 1,598 RPS. 총 요청 수는 67,417건에서 118,900건으로 76.4% 증가
 - **주된 기여 — N+1 해결:** Before는 채팅방 목록 호출마다 약 21개 쿼리(1+10+10)를 실행하지만, After는 1개 쿼리로 통합. DB 부하 감소가 RPS 증가의 핵심 원인
 - **보조 기여 — Redis 캐싱:** 동일 유저의 반복 호출 시 DB 조회를 줄여 p50 개선에 기여했을 가능성이 있다. 이 테스트는 N+1 제거와 캐싱을 함께 적용한 결과이므로 캐시 단독 효과는 별도 분리 측정하지 않았다.
 - **테일 레이턴시(p95) 30% 개선:** Before의 p95 212ms에는 DB 커넥션 풀 경합에 의한 대기시간이 포함
@@ -564,14 +564,21 @@ $ redis-cli TTL "rooms::1"
 **기록 지표:**
 - HTTP RPS, p95 latency, error rate는 k6 기본 metric으로 확인
 - `message_send_ack_latency`: STOMP SEND부터 Kafka publish ACK 수신까지
-- `send_to_receive_latency`: 전송한 메시지 content marker가 room topic으로 돌아온 경우에만 기록
+- `send_to_receive_latency`: 발신자가 자기 메시지 content marker를 room topic에서 다시 관측한 경우에만 기록. 실제 수신자 send-to-receive latency나 전체 delivery completeness가 아니다.
 - `read_receipt_api_latency`: 읽음 처리 API 응답 시간
 - `messages_sent`, `acks_received`, `nacks_received`, `messages_received`, `errors`
 - `ws_connection_success_rate`: WebSocket upgrade 성공률
 - `ack_success_rate`: 전송 메시지 중 ACK 수신 비율
 - `nack_rate`: 전송 메시지 중 NACK 수신 비율
-- `delivery_success_rate`: 전송 메시지가 room topic으로 다시 관측된 비율
+- `delivery_success_rate`: 발신자 self echo가 room topic에서 다시 관측된 비율. 전체 receiver delivery completeness가 아니다.
 - `websocket_connection_failures`: WebSocket 연결 실패 수
+
+서버 내부 Micrometer metric은 별도로 둔다. `chat.messages.received`와
+`chat.room.fanout.latency`는 Redis room channel 수신 후 STOMP room topic 브로드캐스트 호출까지의
+서버 처리 경계이며, receiver client가 실제로 MESSAGE frame을 받은 지표가 아니다.
+`chat.messages.dlt.routed`, `chat.messages.dlt.replayed`, `chat.rooms.cache.evictions`는 운영
+관측용 counter이지만, 아직 공개 benchmark 수치로 기록하지 않는다. cache hit / miss는 Spring
+cache metric 이름과 tag를 확인한 뒤 별도 측정으로 기록한다.
 
 **실행 예시:**
 
@@ -599,18 +606,138 @@ k6 run \
 
 | 구분 | 값 | 조건 |
 | --- | --- | --- |
-| HTTP RPS | pending | 실행 후 기록 |
-| HTTP p95 | pending | 실행 후 기록 |
-| `message_send_ack_latency` p95 | pending | 실행 후 기록 |
-| `send_to_receive_latency` p95 | pending | 실행 후 기록 |
-| ACK success rate | pending | 실행 후 기록 |
-| NACK rate | pending | 실행 후 기록 |
-| delivery success rate | pending | 실행 후 기록 |
-| read receipt API p95 | pending | 실행 후 기록 |
+| HTTP RPS | 추가 측정 예정 | 실행 후 기록 |
+| HTTP p95 | 추가 측정 예정 | 실행 후 기록 |
+| `message_send_ack_latency` p95 | 추가 측정 예정 | 실행 후 기록 |
+| `send_to_receive_latency` p95 | 추가 측정 예정 | 실행 후 기록 |
+| ACK success rate | 추가 측정 예정 | 실행 후 기록 |
+| NACK rate | 추가 측정 예정 | 실행 후 기록 |
+| delivery success rate | 추가 측정 예정 | 실행 후 기록 |
+| read receipt API p95 | 추가 측정 예정 | 실행 후 기록 |
 
-**결과:** scenario added, result pending
+**결과:** local smoke 실행 확인, benchmark는 추가 측정 예정
 
-아직 이 시나리오를 실행한 성능 수치는 없다. 따라서 mixed traffic 기준 p95 latency, send-to-receive latency, 수신 completeness는 결과로 기록하지 않는다.
+2026-05-22에 `SMOKE=1`, 1 VU 조건으로 local 단일 인스턴스 mixed chat smoke를 실행해 REST 조회,
+WebSocket 연결, 메시지 전송, ACK 수신, 발신자 self echo 관측, 읽음 처리 API 호출 경로가 함께 통과함을
+확인했다. 보존 위치는
+[`docs/evidence/MIXED_CHAT_SMOKE_2026-05-22.md`](evidence/MIXED_CHAT_SMOKE_2026-05-22.md)이다.
+
+이 결과는 작은 smoke이므로 mixed traffic 기준 RPS/p95 benchmark, 실제 수신자 send-to-receive latency,
+수신 completeness, room-global ordering 결과로 기록하지 않는다.
+
+### 4-5. Receiver Matrix Tool Validation, Not Public Benchmark
+
+`scripts/ws-delivery-runner.mjs`를 추가했다. 이 스크립트는 Node built-in `fetch`와 `WebSocket`으로
+test user와 group room을 만들고, 각 member의 STOMP `CONNECTED`를 확인한 뒤 room/ACK/ERROR/PERSISTED
+`SUBSCRIBE`를 보낸다. send window는 `CONNECTED` 확인과 settle delay 이후 시작하고, room/status
+`SUBSCRIBE` receipt는 기본적으로 진단값으로만 기록한다. 결과는 `scripts/delivery-matrix.mjs`로
+검산한다. room topic receipt까지 hard barrier로 확인해야 할 때는 `--require-room-receipts true`,
+status queue receipt까지 확인해야 할 때는 `--require-status-receipts true`를 별도 실행에 사용한다.
+
+```bash
+node scripts/ws-delivery-runner.mjs \
+  --base http://localhost:8081 \
+  --ws ws://localhost:8081/ws,ws://localhost:8082/ws \
+  --users 10 \
+  --senders 2 \
+  --messages 5 \
+  --subscribe-receipt-timeout-ms 5000 \
+  --status-subscribe-settle-ms 250 \
+  --drain-ms 5000 \
+  --out-dir artifacts/ws/smoke
+```
+
+`status.jsonl`은 `/user/queue/messages/ack`, `/user/queue/messages/error`,
+`/user/queue/messages/persisted`에서 관측한 `ACCEPTED`, `FAILED`, `PERSISTED` 상태를 기록한다.
+matrix summary는 전체 SEND 시도 수와 별도로 `acceptedDelivery`, `persistedDelivery`,
+`statuslessSends`를 제공한다. 따라서 후속 실행에서는 ACK가 확인된 메시지와 ACK가 없는 메시지를
+분리해 delivery completeness를 해석해야 한다.
+옵션으로 `--mixed-http-probes true`를 켜면 room list, message history, read receipt HTTP probe가
+`http.jsonl`과 `mixedHttp` summary에 별도로 남는다. 이 로그는 mixed REST 경로 관측용이며 receiver
+delivery denominator를 바꾸지 않는다.
+
+2026-05-22 로컬 Docker Compose에서 app-1/app-2에 receiver를 나눠 붙이고 low-rate receiver matrix를
+검산했다. 이 결과는 작은 local baseline이며, 운영 성능 claim이나 전체 WebSocket benchmark가 아니다.
+raw 요약 수치는 public performance table이 아니라
+[`docs/evidence/RECEIVER_MATRIX_SMOKE_2026-05-22.md`](evidence/RECEIVER_MATRIX_SMOKE_2026-05-22.md)에
+증거 snapshot으로만 분리했다.
+
+| 항목 | 값 |
+| --- | --- |
+| 목적 | receiver matrix / status denominator 검산 경로 확인 |
+| 실행 조건 | users 10, senders 2, messages per sender 5, send interval 125ms |
+| 확인한 경로 | member / send / receive / status JSONL 생성과 accepted / persisted / statusless 분리 |
+| 최신 local baseline | accepted sends 10, expected 90 / unique delivery 90 / missing 0 / duplicate 0 |
+| local diagnostic latency snapshot | p50 16ms, p95 239ms, p99 240ms, 공개 성능 지표 아님 |
+| 공개 지표 여부 | 큰 시나리오/반복 benchmark의 send-to-receive latency와 delivery completeness는 추가 측정 예정 |
+| 보존 위치 | `docs/evidence/RECEIVER_MATRIX_SMOKE_2026-05-22.md` |
+
+2026-05-22에 같은 runner로 단일 방 50명 local receiver run도 실행했습니다.
+
+| 항목 | 값 |
+| --- | --- |
+| 목적 | 1 room / 50 users receiver matrix representative local run |
+| 실행 조건 | users 50, senders 5, messages per sender 20, send interval 100ms |
+| status denominator | accepted sends 100, failed 0, statusless 0 |
+| delivery matrix | expected 4,900 / unique delivery 4,900 / missing 0 / duplicate 0 |
+| local diagnostic latency snapshot | p50 18ms, p95 31ms, p99 139ms, 공개 성능 지표 아님 |
+| ordering 해석 | sender-local diagnostic 3건, room-global ordering claim 아님 |
+| 보존 위치 | `docs/evidence/receiver-matrix-50users-20260522-summary.json` |
+
+이 결과는 단일 local run이므로 반복 benchmark나 운영 성능 claim으로 확장하지 않습니다. room-global ordering은
+persisted message id 또는 Kafka offset 기반 sequence를 기록한 뒤 별도 검증해야 합니다.
+
+### 4-4. 50-user receiver matrix repeat3
+
+같은 Docker Compose app-1/app-2 환경에서 50-user receiver matrix를 3회 반복했습니다. 이 실행은
+local scenario evidence이며, 500/1,000 session benchmark나 운영 성능 claim으로 확장하지 않습니다.
+
+| run | accepted sends | expected | unique | missing | duplicate | completeness | p50 | p95 | p99 | max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 100 | 4,900 | 4,900 | 0 | 0 | 100% | 18ms | 38ms | 127ms | 229ms |
+| 2 | 100 | 4,900 | 4,900 | 0 | 0 | 100% | 16ms | 23ms | 36ms | 47ms |
+| 3 | 100 | 4,900 | 4,900 | 0 | 0 | 100% | 16ms | 24ms | 27ms | 32ms |
+
+요약 JSON은 `docs/evidence/receiver-matrix-50users-repeat3-20260522-summary.json`에 보존했습니다.
+세 번 모두 accepted sends 100, statusless 0, failed 0이며, p95 범위는 23-38ms입니다. 이 수치는
+recipient 기준 local receiver matrix 반복 검증으로만 사용하고, mixed traffic p95나 room-global ordering
+수치로 해석하지 않습니다.
+
+### 4-5. 500-user receiver matrix repeat3 local scenario
+
+같은 Docker Compose app-1/app-2 환경에서 500-user receiver matrix를 3회 반복했습니다. 이 실행은
+accepted-send 기준 receiver fan-out 경로를 더 큰 단일 room에서 확인한 scenario evidence이며,
+1,000 session benchmark나 운영 성능 claim으로 확장하지 않습니다.
+
+| 항목 | 값 |
+| --- | --- |
+| 목적 | 1 room / 500 users receiver matrix repeat3 local scenario |
+| 실행 조건 | users 500, senders 5, messages per sender 20, send interval 100ms |
+| status denominator | 각 run accepted sends 100, failed 0, statusless 0 |
+| delivery matrix | 각 run expected 49,900 / unique delivery 49,900 / missing 0 / duplicate 0 |
+| local diagnostic latency snapshot | p50 28-29ms, p95 37-47ms, p99 46-233ms, 공개 성능 지표 아님 |
+| ordering 해석 | sender-local diagnostic 311/473/0건, room-global ordering claim 아님 |
+| 보존 위치 | `docs/evidence/receiver-matrix-500users-20260522-summary.json` |
+
+세 실행에서 PERSISTED status는 0건이므로 persisted-delivery 근거가 아니라 accepted-send 기준 receiver
+fan-out 검증으로만 해석합니다. 1,000 session benchmark, mixed traffic p95, room-global ordering은 별도
+측정 대상입니다.
+
+같은 runner로 sender당 20 messages를 50ms 간격으로 보낸 smoke에서는 기본 SEND rate limit을 넘길 수
+있어 expected 360건 중 170건만 unique delivery로 관측했다. 당시 runner는 ACK/NACK/status 로그가 없어
+ACK 미수신 또는 rate-limited send를 delivery matrix 분모에서 분리하지 못했으므로, 이 missing count는
+fan-out 손실이나 delivery success rate로 해석하지 않는다.
+
+Smoke 과정에서 Redis PatternTopic 수신 channel을 그대로 목적지로 사용하면 `/topic/room.*`로
+브로드캐스트되는 문제가 드러났다. `RedisPubSubService`는 payload의 `roomId`로
+`/topic/room.{roomId}`를 계산하도록 고쳤고, unit test로 고정했다.
+
+현재 runner는 기본 barrier를 `CONNECTED` + settle delay로 두며, 최신 low-rate baseline은 accepted
+send 기준 delivery matrix와 latency snapshot을 남겼다. 다만 sample이 작고 단일 local run이므로 큰
+시나리오의 delivery completeness와 latency를 측정 완료로 올리기 전에는 더 큰 시나리오와 반복 로그를
+함께 검토한다.
+현재 `roomSequence`는 sender별 sequence이므로 `sender-local order diagnostic`은 smoke 진단용이며
+room 전체 ordering 성능 지표가 아니다.
 
 ---
 
@@ -636,8 +763,9 @@ k6 run \
 | 인덱스 | 일부 핵심 조건에 인덱스 활용 부족 | 주요 조건 컬럼에서 인덱스 사용 확인 | 데이터 증가 시에도 핵심 조회 경로를 안정화 |
 | 캐시 | 매 요청마다 DB 조회 | 캐시 히트 시 DB 조회 0회 | 반복 조회 시 DB 부하 제거 |
 | 부하테스트 (REST 조회) | 937 RPS, p50 54ms | 1,598 RPS, p50 16ms | **RPS +70%**, **p50 -69%** |
-| 부하테스트 (WS 연결) | - | 579 동시 session, 0% 연결 실패 | 스케일아웃 시 1,158 session |
-| Mixed chat scenario | - | scenario added, result pending | 아직 결과 수치 없음 |
+| 부하테스트 (WS 연결) | - | 579 동시 session, 0% 연결 실패 | 2대 local smoke에서 1,158 session 연결 체크, 선형 확장 claim 아님 |
+| Receiver matrix | - | 50-user local repeat3 모두 completeness 100%, p95 23-38ms / 500-user local repeat3 모두 completeness 100%, p95 37-47ms | recipient 기준 시나리오 검증, 운영 성능 claim 아님 |
+| Mixed chat scenario | - | local smoke 실행 확인 | benchmark는 추가 측정 예정 |
 
 ---
 
@@ -657,7 +785,8 @@ k6 run \
 
 **한계:** 실제 트래픽은 읽기(채팅방 목록, 메시지 이력)와 쓰기(메시지 전송, 읽음 처리)가 혼합된다. 기존 결과에는 send-to-receive end-to-end latency, 수신 completeness, 메시지 순서 정확도 수치가 없다.
 
-**개선 방향:** `k6/mixed-chat-test.js`를 실행해 ACK latency, 가능한 send-to-receive latency, 읽음 처리 latency를 별도 결과로 기록한다. 현재 상태는 `scenario added, result pending`이다.
+**개선 방향:** `k6/mixed-chat-test.js`의 local smoke는 통과했지만, ACK latency와 가능한 send-to-receive latency,
+읽음 처리 latency를 공개 benchmark로 올리려면 반복 실행과 receiver 기준 검증을 별도로 기록해야 한다.
 
 ### 7-3. 테스트 환경
 
