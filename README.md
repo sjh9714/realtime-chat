@@ -121,12 +121,14 @@ Receiver matrix와 mixed probe는 별도 로컬 evidence로 분리합니다.
 
 ### 아직 주장하지 않는 것
 
-- production 1,000 session send-to-receive latency
-- production 1,000 session delivery completeness
-- production / multi-instance mixed traffic p95 latency
-- production / mixed 1,000-session benchmark
+| 항목 | 상태 |
+|---|---|
+| 1,000 session send-to-receive latency | benchmark 미측정 |
+| 1,000 session delivery completeness | benchmark 미측정 |
+| mixed traffic p95 latency | benchmark 미측정 |
 
-위 항목은 모두 `추가 측정 예정`입니다.
+mixed traffic cache hit rate는 추가 측정 예정입니다.
+위 항목은 production / multi-instance benchmark로 주장하지 않습니다.
 local receiver matrix repeat3와 mixed HTTP probe는 시나리오 검증이며,
 production/mixed benchmark로 확장하지 않습니다.
 상세 기준은 [WebSocket measurement 문서](docs/WEBSOCKET_MEASUREMENT.md)에 분리했습니다.
