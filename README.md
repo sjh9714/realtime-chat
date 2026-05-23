@@ -33,6 +33,30 @@ ACK / PERSISTED / RECEIVED 의미:
 
 ---
 
+## 전체 아키텍처
+
+![Realtime Chat 전체 아키텍처](docs/assets/architecture/overall-architecture.svg)
+
+Client는 WebSocket STOMP 연결로 메시지를 보내고, Spring Boot app은 인증/인가 후 Kafka에 `roomId` key로 publish합니다.
+Kafka consumer는 DB 저장 경로와 receiver fan-out 경로를 분리합니다.
+Redis Presence는 TTL 기반 임시 상태이며, PostgreSQL의 message / room / read state가 재연결 복구의 진실 소스입니다.
+
+### 핵심 설계 판단
+
+| 판단 | 이유 | 경계 |
+|---|---|---|
+| WebSocket 연결, Kafka publish, DB persisted, receiver delivery 분리 | ACK/PERSISTED/RECEIVED가 서로 다른 성공 단계를 의미하기 때문 | ACK는 상대방 수신 완료가 아니라 Kafka publish 결과 |
+| Kafka topic은 `roomId` key 사용 | 같은 room 메시지를 같은 partition 순서로 처리하기 위함 | 서로 다른 room 간 전역 순서는 보장하지 않음 |
+| PostgreSQL을 recovery truth로 사용 | Redis Pub/Sub와 Presence는 복구용 durable store가 아니기 때문 | 재연결 시 `lastReceivedMessageId` 이후를 sync API로 조회 |
+| Redis는 Presence / Cache / Rate Limit에 한정 | 빠른 TTL 상태와 user-level 제한에 적합하기 때문 | `mixed traffic cache hit rate는 추가 측정 예정` |
+| DLT로 consumer 실패 격리 | 실패 메시지가 정상 흐름을 막지 않도록 분리하기 위함 | replay 운영 절차와 감사 로그는 별도 과제 |
+
+이 다이어그램은 구현된 핵심 흐름과 검증 대상 경계를 설명하기 위한 단순화된 구조도이며, 운영 배포 토폴로지나 production SLO를 주장하지 않습니다.
+
+상세 설명은 [아키텍처 문서](docs/ARCHITECTURE.md)에 분리했습니다.
+
+---
+
 ## 핵심 문제
 
 실시간 채팅 백엔드는 WebSocket 연결만으로 완성되지 않습니다.
@@ -50,21 +74,6 @@ DB 저장 경로를 거치기 때문에 아래 문제가 함께 해결되어야 
 | 읽음 수가 발신자 본인 메시지나 참여 전 메시지까지 포함하지 않는가 | `senderId != userId`, `joinedAt`, `lastReadMessageId` 기준으로 unread count 재계산 |
 | 한 사용자가 여러 세션으로 접속했을 때 일부 세션 종료로 offline 처리되는가 | `userId + sessionId` 단위 Redis TTL presence |
 | 메시지 저장 시 관계없는 사용자의 채팅방 목록 cache까지 삭제되는가 | 해당 room member의 `rooms::{userId}` cache만 evict |
-
----
-
-## 아키텍처 요약
-
-<p align="center">
-  <img src="docs/architecture.svg" alt="Realtime Chat container architecture" width="900">
-</p>
-
-- Client는 Spring Boot App에 `CONNECT`, `SUBSCRIBE`, `SEND`를 보냅니다.
-- App은 JWT와 room membership을 검증한 뒤 Kafka `chat.messages`에 `roomId` key로 publish합니다.
-- Kafka consumer는 저장 경로와 브로드캐스트 경로를 분리해 PostgreSQL과 Redis Pub/Sub로 처리합니다.
-- Redis Pub/Sub는 여러 app instance에 이벤트를 전달하고, 각 instance가 WebSocket room topic으로 fan-out합니다.
-- WebSocket 재연결 시 클라이언트는 마지막 수신 메시지 id 이후의 메시지를 sync API로 보정할 수 있습니다.
-- ACK/NACK는 Kafka publish 결과만 의미합니다. DLT replay, read receipt, presence 상세 흐름은 [설계 문서](docs/DESIGN.md)에 분리했습니다.
 
 ---
 
@@ -708,6 +717,7 @@ k6 run \
 | 문서 | 내용 |
 |---|---|
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 아키텍처, Kafka, WebSocket, DLT, read receipt, presence, cache 설계 |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | README 전체 아키텍처 다이어그램과 설계 경계 |
 | [`docs/PERF_RESULT.md`](docs/PERF_RESULT.md) | REST 조회 API 최적화와 k6 측정 결과 |
 | [`docs/TESTING.md`](docs/TESTING.md) | 테스트와 smoke runner가 어떤 claim을 지지하는지 정리 |
 | [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | DLT, receiver matrix, presence, cache 관련 대응 절차 초안 |
@@ -717,6 +727,7 @@ k6 run \
 | [`docs/REDIS_LIMITATIONS.md`](docs/REDIS_LIMITATIONS.md) | Redis fixed-window rate limit과 cache hit rate 한계 |
 | [`docs/STUDY_GUIDE.md`](docs/STUDY_GUIDE.md) | 코드 흐름 학습 가이드 |
 | [`docs/architecture.drawio`](docs/architecture.drawio) | README 컨테이너 다이어그램 원본 |
+| [`docs/assets/architecture/overall-architecture.drawio`](docs/assets/architecture/overall-architecture.drawio) | README 전체 아키텍처 다이어그램 원본 |
 
 `monitoring/`의 Prometheus/Grafana 파일은 local template입니다. `/actuator/prometheus`에서 metric과
 quantile panel을 직접 검증한 운영 dashboard 증거로 사용하지 않습니다.
