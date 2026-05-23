@@ -2,10 +2,10 @@
 
 이 문서는 WebSocket 메시지의 send-to-receive latency와 delivery completeness를 측정하기 위한 계획이다.
 
-receiver matrix low-rate baseline, 50-user local receiver repeat3, 500-user local receiver repeat3는 측정 도구와
-fan-out 경로 검증 근거로 보존한다. 다만 반복 실행, clock/환경 기록이 충분한 공개 latency, delivery
-completeness, room ordering benchmark는 아직 없으므로 1,000 session benchmark와 room-global ordering은
-`추가 측정 예정`으로 유지한다.
+receiver matrix low-rate baseline, 50-user local receiver repeat3, 500-user local receiver repeat3,
+1,000-user local receiver repeat3는 측정 도구와 fan-out 경로 검증 근거로 보존한다. 다만 반복 실행,
+clock/환경 기록이 충분한 공개 latency, delivery completeness, mixed traffic benchmark는 아직 없으므로
+production/mixed benchmark는 `추가 측정 예정`으로 유지한다.
 
 ## 1. 측정하지 않는 것
 
@@ -112,15 +112,16 @@ actual unique deliveries / expected deliveries * 100
 
 | 지표 | 상태 | 산출 방식 |
 | --- | --- | --- |
-| send-to-receive p50 / p90 / p95 / p99 / max | 50-user local repeat3와 500-user local repeat3 기록, 1,000 session benchmark 아님 | receive log와 send log를 `clientMessageId`로 join |
-| expected deliveries | 50-user local repeat3와 500-user local repeat3 기록, public benchmark 아님 | accepted sends 기준 구독 member matrix에서 산출 |
-| accepted-send expected deliveries | 50-user local repeat3와 500-user local repeat3 기록, public benchmark 아님 | `ACCEPTED`가 확인된 SEND만 분모로 산출 |
-| persisted-send expected deliveries | 추가 측정 예정 | `PERSISTED`가 확인된 SEND만 분모로 산출 |
-| statusless sends | 50-user local repeat3와 500-user local repeat3 기록, public benchmark 아님 | drain 종료까지 ACK/NACK/PERSISTED가 없는 SEND 시도 |
-| actual unique deliveries | 50-user local repeat3와 500-user local repeat3 기록, public benchmark 아님 | `(receiverUserId, clientMessageId)` unique count |
-| missing deliveries | 50-user local repeat3와 500-user local repeat3 기록, public benchmark 아님 | expected matrix - actual unique deliveries |
-| duplicate deliveries | 50-user local repeat3와 500-user local repeat3 기록, public benchmark 아님 | 동일 receiver에게 같은 메시지가 2회 이상 도착한 건수 |
-| sender-local order diagnostic | local snapshot 기록, room-global ordering은 추가 측정 예정 | receiver + room + sender별 sender-local sequence 단조 증가 위반 |
+| send-to-receive p50 / p90 / p95 / p99 / max | 50/500/1,000-user local repeat3 기록, public benchmark 아님 | receive log와 send log를 `clientMessageId`로 join |
+| expected deliveries | 50/500/1,000-user local repeat3 기록, public benchmark 아님 | accepted sends 기준 구독 member matrix에서 산출 |
+| accepted-send expected deliveries | 50/500/1,000-user local repeat3 기록, public benchmark 아님 | `ACCEPTED`가 확인된 SEND만 분모로 산출 |
+| persisted-send expected deliveries | 1,000-user local repeat3 기록, public benchmark 아님 | `PERSISTED`가 확인된 SEND만 분모로 산출 |
+| statusless sends | 50/500/1,000-user local repeat3 기록, public benchmark 아님 | drain 종료까지 ACK/NACK/PERSISTED가 없는 SEND 시도 |
+| actual unique deliveries | 50/500/1,000-user local repeat3 기록, public benchmark 아님 | `(receiverUserId, clientMessageId)` unique count |
+| missing deliveries | 50/500/1,000-user local repeat3 기록, public benchmark 아님 | expected matrix - actual unique deliveries |
+| duplicate deliveries | 50/500/1,000-user local repeat3 기록, public benchmark 아님 | 동일 receiver에게 같은 메시지가 2회 이상 도착한 건수 |
+| sender-local order diagnostic | local snapshot 기록 | receiver + room + sender별 sender-local sequence 단조 증가 위반 |
+| room-global ordering diagnostic | 1,000-user local repeat3 기록, public benchmark 아님 | persisted DB `messageId`가 raw artifact에 있으면 receiver + room별 단조 증가 위반 |
 
 `scripts/ws-delivery-runner.mjs`는 실제 STOMP client를 여러 개 띄워 member / send /
 receive / status JSONL을 생성하는 local smoke runner입니다. `scripts/delivery-matrix.mjs`는
@@ -308,14 +309,14 @@ persisted message id 또는 Kafka offset 기반 검증이 필요합니다.
 `artifacts/`는 local generated artifact로 git에 포함하지 않습니다.
 
 세 번 모두 expected 4,900 / unique 4,900 / missing 0 / duplicate 0 / completeness 100%였고, p95 범위는
-23-38ms입니다. 다만 이 결과도 local Docker Compose 반복 실행이므로 room-global ordering, mixed traffic
-latency, production performance claim으로 확장하지 않습니다.
+23-38ms입니다. 다만 이 결과도 local Docker Compose 반복 실행이므로 mixed traffic latency, production
+performance claim으로 확장하지 않습니다.
 
 ### 5-2-2. 500-user local receiver repeat3
 
 2026-05-22에 같은 Docker Compose app-1/app-2 환경에서 단일 방 500명 receiver matrix를 3회 반복했습니다.
 이 실행은 더 큰 단일 hot room에서 fan-out과 receiver matrix 계산 경로를 확인한 local scenario evidence이며,
-1,000 session benchmark, 운영 성능 claim으로 사용하지 않습니다.
+운영 성능 claim으로 사용하지 않습니다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -334,7 +335,32 @@ latency, production performance claim으로 확장하지 않습니다.
 `artifacts/`는 local generated artifact로 git에 포함하지 않습니다.
 
 이 결과는 local repeat3 실행이므로 p95 37-47ms와 completeness 100%를 운영 성능 claim으로 확장하지 않습니다.
-`senderLocalOutOfOrderCount`는 sender-local diagnostic이며 room-global ordering 성능 지표가 아닙니다.
+`senderLocalOutOfOrderCount`는 sender-local diagnostic이며 persisted DB id 기반 room-global ordering 성능 지표가 아닙니다.
+
+### 5-2-3. 1,000-user local receiver repeat3
+
+2026-05-23에 같은 Docker Compose app-1/app-2 환경에서 단일 방 1,000명 receiver matrix를 3회 반복했습니다.
+이 실행은 1,000 local WebSocket session에서 fan-out, receiver matrix, persisted DB `messageId` 기반
+room-global ordering diagnostic을 확인한 local scenario evidence이며, mixed traffic 또는 운영 성능 claim으로
+사용하지 않습니다.
+
+| run | accepted sends | persisted sends | expected | unique | missing | duplicate | completeness | p50 | p95 | p99 | max | room-global out-of-order |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 100 | 100 | 99,900 | 99,900 | 0 | 0 | 100% | 30ms | 45ms | 75ms | 98ms | 0 |
+| 2 | 100 | 100 | 99,900 | 99,900 | 0 | 0 | 100% | 31ms | 50ms | 75ms | 90ms | 0 |
+| 3 | 100 | 100 | 99,900 | 99,900 | 0 | 0 | 100% | 30ms | 45ms | 58ms | 70ms | 0 |
+
+요약 JSON은
+[`docs/evidence/receiver-matrix-1000users-repeat3-20260523-summary.json`](evidence/receiver-matrix-1000users-repeat3-20260523-summary.json)에
+보존했습니다. 요약 문서는
+[`docs/evidence/RECEIVER_MATRIX_1000USERS_REPEAT3_2026-05-23.md`](evidence/RECEIVER_MATRIX_1000USERS_REPEAT3_2026-05-23.md)에
+분리했습니다. raw artifact root는 `artifacts/ws/20260523T005158Z-receiver-matrix-1000users-repeat3`이며,
+`artifacts/`는 local generated artifact로 git에 포함하지 않습니다.
+
+세 번 모두 expected 99,900 / unique 99,900 / missing 0 / duplicate 0 / completeness 100%였고, p95 범위는
+45-50ms입니다. room-global ordering은 persisted DB `messageId`를 raw send/receive rows에 노출한 뒤
+receiver + room별 단조 증가 위반을 계산했으며, 세 번 모두 `outOfOrderCount 0`입니다. 이 결과도 local
+Docker Compose 반복 실행이므로 production p95, 장시간 soak, mixed traffic benchmark로 확장하지 않습니다.
 
 같은 runner로 sender당 20 messages를 50ms 간격으로 보낸 smoke에서는 기본 SEND rate limit을 넘길 수
 있어 expected 360건 중 170건만 unique delivery로 관측했습니다. 당시 runner는 ACK/NACK/status 로그가
@@ -409,7 +435,7 @@ benchmark로 사용하지 않습니다.
 | 1 room, 50 users | 단일 hot room fan-out | local repeat3 기록, public benchmark는 추가 측정 예정 |
 | 10 rooms, room당 50 users | room 분산 traffic | runner option 준비, 실제 benchmark는 추가 측정 예정 |
 | 500 concurrent WebSocket sessions | 중간 규모 동시 연결 | local repeat3 기록, public benchmark는 추가 측정 예정 |
-| 1,000 concurrent WebSocket sessions | 높은 동시 연결 | 추가 측정 예정 |
+| 1,000 concurrent WebSocket sessions | 높은 동시 연결 | local repeat3 기록, public/mixed benchmark는 추가 측정 예정 |
 | 10 msg/s | 낮은 전송률 baseline | 50-user local snapshot 후보, 반복 benchmark는 추가 측정 예정 |
 | 50 msg/s | 일반 부하 | 추가 측정 예정 |
 | 100 msg/s | burst에 가까운 부하 | 추가 측정 예정 |
@@ -435,8 +461,8 @@ artifact를 `docs/PERF_RESULT.md` 또는 portfolio claim으로 옮기기 전에 
 - 각 expected room id가 `summary.byRoom`에 존재한다.
 - mixed HTTP probe를 포함한 실행은 `mixedHttp.failedRequests === 0`이다.
 - `statusless`, `failed`, `missing`, `duplicate`, `unexpected`가 있으면 성능 성공 claim이 아니라 진단 결과로만 쓴다.
-- 1,000-session 또는 mixed benchmark는 해당 규모의 raw artifact, manifest, validator 통과 기록이 있을 때만
-  `측정 완료`로 승격한다. 현재는 `추가 측정 예정`으로 유지한다.
+- production/mixed benchmark는 해당 규모의 raw artifact, manifest, validator 통과 기록이 있을 때만
+  `측정 완료`로 승격한다. 현재 local receiver matrix는 `시나리오 검증`으로 유지한다.
 
 ## 8. 결과 기록 템플릿
 
@@ -457,3 +483,4 @@ artifact를 `docs/PERF_RESULT.md` 또는 portfolio claim으로 옮기기 전에 
 | duplicate deliveries | 추가 측정 예정 | 실행 후 기록 |
 | delivery completeness | 추가 측정 예정 | 실행 후 기록 |
 | sender-local order diagnostic | 추가 측정 예정 | 실행 후 기록 |
+| room-global ordering diagnostic | 추가 측정 예정 | persisted DB message id가 있을 때만 기록 |
