@@ -282,6 +282,11 @@ async function main() {
     clients.forEach((client) => client.close());
   }
 
+  await enrichPersistedMessageIds({
+    baseUrl: options.baseUrl,
+    rooms,
+    logs,
+  });
   writeJsonLines(outDir, "members.jsonl", logs.members);
   writeJsonLines(outDir, "send.jsonl", logs.send);
   writeJsonLines(outDir, "receive.jsonl", logs.receive);
@@ -550,6 +555,87 @@ function buildSendJobs(clients, rooms, sendersPerRoom, messagesPerUser) {
     }
   }
   return jobs;
+}
+
+async function enrichPersistedMessageIds({ baseUrl, rooms, logs }) {
+  const persistedByMessage = await persistedMessageIndex({ baseUrl, rooms, logs });
+
+  for (const row of [...logs.send, ...logs.receive]) {
+    const persisted =
+      persistedByMessage.byMessageKey.get(keyOfMessage(row.roomId, row.clientMessageId)) ??
+      (row.messageKey ? persistedByMessage.byServerMessageKey.get(row.messageKey) : null) ??
+      persistedByMessage.byContent.get(contentKey(row));
+    if (!persisted) {
+      continue;
+    }
+    row.messageId = persisted.messageId;
+    row.messageIdSource = persisted.source;
+    if (persisted.messageKey && !row.messageKey) {
+      row.messageKey = persisted.messageKey;
+    }
+  }
+}
+
+async function persistedMessageIndex({ baseUrl, rooms, logs }) {
+  const byMessageKey = new Map();
+  const byServerMessageKey = new Map();
+  const byContent = new Map();
+
+  for (const status of logs.status) {
+    if (!status.roomId || !status.clientMessageId || !Number.isFinite(Number(status.messageId))) {
+      continue;
+    }
+    byMessageKey.set(keyOfMessage(status.roomId, status.clientMessageId), {
+      messageId: Number(status.messageId),
+      messageKey: status.messageKey,
+      source: "status",
+    });
+  }
+
+  for (const room of rooms) {
+    const expectedMessages = logs.send.filter((row) => row.roomId === room.id).length;
+    if (expectedMessages === 0) {
+      continue;
+    }
+    const history = await requestJson(
+      "GET",
+      new URL(`/api/rooms/${room.id}/messages?size=${expectedMessages}`, baseUrl),
+      room.users[0].token,
+    );
+    const messages = Array.isArray(history.body?.messages) ? history.body.messages : [];
+    for (const message of messages) {
+      const messageId = Number(message.id ?? message.messageId);
+      if (!Number.isFinite(messageId)) {
+        continue;
+      }
+      const persisted = {
+        messageId,
+        messageKey: message.messageKey,
+        source: "history",
+      };
+      if (message.messageKey) {
+        byServerMessageKey.set(message.messageKey, persisted);
+      }
+      byContent.set(
+        contentKey({
+          runId: runIdFromContent(message.content),
+          roomSequence: sequenceFromContent(message.content),
+          senderUserId: message.senderId,
+        }),
+        persisted,
+      );
+    }
+  }
+
+  return { byMessageKey, byServerMessageKey, byContent };
+}
+
+function keyOfMessage(roomId, clientMessageId) {
+  return `${roomId}\u0000${clientMessageId}`;
+}
+
+function contentKey(row) {
+  return `${row.runId}\u0000${row.roomSequence}\u0000${row.senderUserId}`;
 }
 
 async function postJson(url, payload, token = null) {
@@ -1003,6 +1089,10 @@ function parseFrame(rawFrame) {
 function sequenceFromContent(content) {
   const value = Number(String(content ?? "").split(":")[1]);
   return Number.isFinite(value) ? value : undefined;
+}
+
+function runIdFromContent(content) {
+  return String(content ?? "").split(":")[0] || undefined;
 }
 
 function safeJson(text) {

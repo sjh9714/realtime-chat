@@ -270,6 +270,8 @@ function validateRegeneratedSummary(artifactDir, files, summary, errors) {
     "duplicateDeliveries",
     "unexpectedDeliveries",
     "senderLocalOutOfOrderCount",
+    "roomGlobalOutOfOrderCount",
+    "roomGlobalOrdering",
     "completenessPercent",
     "sendStatus",
     "acceptedDelivery",

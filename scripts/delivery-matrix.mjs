@@ -78,6 +78,11 @@ function normalizeStatus(status) {
   }
 }
 
+function numericMessageId(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function percentile(values, ratio) {
   if (values.length === 0) {
     return null;
@@ -200,7 +205,10 @@ function summarizeScope({ roomMembers, sends, receives, statuses = [] }) {
   let unexpectedDeliveries = 0;
   const latencyMs = [];
   const lastSequenceByReceiverRoomSender = new Map();
+  const lastPersistedMessageIdByReceiverRoom = new Map();
   let senderLocalOutOfOrderCount = 0;
+  let roomGlobalOutOfOrderCount = 0;
+  let roomGlobalComparableDeliveries = 0;
 
   for (const receive of receives) {
     if (!receive.roomId || !receive.receiverUserId || !receive.clientMessageId) {
@@ -225,6 +233,19 @@ function summarizeScope({ roomMembers, sends, receives, statuses = [] }) {
     }
     if (Number.isFinite(send?.sendStartedAtMs) && Number.isFinite(receive.receivedAtMs)) {
       latencyMs.push(receive.receivedAtMs - send.sendStartedAtMs);
+    }
+    const persistedMessageId = resolvePersistedMessageId(statusIndex, receive, send);
+    if (persistedMessageId !== null) {
+      roomGlobalComparableDeliveries += 1;
+      const orderKey = `${receive.receiverUserId}\u0000${receive.roomId}`;
+      const previousMessageId = lastPersistedMessageIdByReceiverRoom.get(orderKey);
+      if (previousMessageId !== undefined && persistedMessageId < previousMessageId) {
+        roomGlobalOutOfOrderCount += 1;
+      }
+      lastPersistedMessageIdByReceiverRoom.set(
+        orderKey,
+        Math.max(previousMessageId ?? persistedMessageId, persistedMessageId),
+      );
     }
     if (receive.roomSequence !== undefined && receive.roomId) {
       const sequenceKey = `${receive.receiverUserId}\u0000${receive.roomId}\u0000${receive.senderUserId}`;
@@ -253,6 +274,13 @@ function summarizeScope({ roomMembers, sends, receives, statuses = [] }) {
     duplicateDeliveries,
     unexpectedDeliveries,
     senderLocalOutOfOrderCount,
+    roomGlobalOutOfOrderCount,
+    roomGlobalOrdering: {
+      source:
+        roomGlobalComparableDeliveries > 0 ? "persistedMessageId" : "unavailable",
+      comparableDeliveries: roomGlobalComparableDeliveries,
+      outOfOrderCount: roomGlobalOutOfOrderCount,
+    },
     completenessPercent: allDelivery.completenessPercent,
     sendStatus: {
       totalSends: sends.length,
@@ -318,6 +346,7 @@ function summarizeExpectedSet(expected, actual) {
 
 function indexStatuses(statuses) {
   const byMessageKey = new Map();
+  const messageIdsByMessageKey = new Map();
   let stompErrorsWithoutClientMessageId = 0;
   for (const statusRow of statuses) {
     const status = normalizeStatus(statusRow.status);
@@ -334,8 +363,12 @@ function indexStatuses(statuses) {
       byMessageKey.set(statusKey, new Set());
     }
     byMessageKey.get(statusKey).add(status);
+    const messageId = numericMessageId(statusRow.messageId);
+    if (messageId !== null) {
+      messageIdsByMessageKey.set(statusKey, messageId);
+    }
   }
-  return { byMessageKey, stompErrorsWithoutClientMessageId };
+  return { byMessageKey, messageIdsByMessageKey, stompErrorsWithoutClientMessageId };
 }
 
 function statusesForSend(statusIndex, send) {
@@ -350,6 +383,25 @@ function hasAnyStatus(statuses, candidates) {
     return false;
   }
   return candidates.some((candidate) => statuses.has(candidate));
+}
+
+function resolvePersistedMessageId(statusIndex, receive, send) {
+  for (const candidate of [
+    receive.messageId,
+    receive.persistedMessageId,
+    send?.messageId,
+    send?.persistedMessageId,
+    statusIndex.messageIdsByMessageKey.get(
+      keyOfMessage(receive.roomId, receive.clientMessageId),
+    ),
+    statusIndex.messageIdsByMessageKey.get(receive.clientMessageId),
+  ]) {
+    const messageId = numericMessageId(candidate);
+    if (messageId !== null) {
+      return messageId;
+    }
+  }
+  return null;
 }
 
 const args = parseArgs(process.argv.slice(2));

@@ -1,0 +1,110 @@
+{
+  "scenario": "receiver-matrix-1000users-10mps-repeat3-local",
+  "date": "2026-05-23",
+  "runtime": "Docker Compose app-1/app-2",
+  "sourceArtifactRoots": [
+    "artifacts/ws/20260523T005158Z-receiver-matrix-1000users-repeat3/run-1",
+    "artifacts/ws/20260523T005158Z-receiver-matrix-1000users-repeat3/run-2",
+    "artifacts/ws/20260523T005158Z-receiver-matrix-1000users-repeat3/run-3"
+  ],
+  "roomUsers": 1000,
+  "senders": 5,
+  "messagesPerSender": 20,
+  "sendIntervalMs": 100,
+  "runs": [
+    {
+      "run": 1,
+      "acceptedSends": 100,
+      "persistedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "expectedDeliveries": 99900,
+      "actualUniqueDeliveries": 99900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 99900,
+        "p50": 30,
+        "p90": 41,
+        "p95": 45,
+        "p99": 75,
+        "max": 98
+      },
+      "roomGlobalOrdering": {
+        "source": "persistedMessageId",
+        "comparableDeliveries": 99900,
+        "outOfOrderCount": 0
+      }
+    },
+    {
+      "run": 2,
+      "acceptedSends": 100,
+      "persistedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "expectedDeliveries": 99900,
+      "actualUniqueDeliveries": 99900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 99900,
+        "p50": 31,
+        "p90": 42,
+        "p95": 50,
+        "p99": 75,
+        "max": 90
+      },
+      "roomGlobalOrdering": {
+        "source": "persistedMessageId",
+        "comparableDeliveries": 99900,
+        "outOfOrderCount": 0
+      }
+    },
+    {
+      "run": 3,
+      "acceptedSends": 100,
+      "persistedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "expectedDeliveries": 99900,
+      "actualUniqueDeliveries": 99900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 99900,
+        "p50": 30,
+        "p90": 40,
+        "p95": 45,
+        "p99": 58,
+        "max": 70
+      },
+      "roomGlobalOrdering": {
+        "source": "persistedMessageId",
+        "comparableDeliveries": 99900,
+        "outOfOrderCount": 0
+      }
+    }
+  ],
+  "aggregate": {
+    "totalAcceptedSends": 300,
+    "totalPersistedSends": 300,
+    "totalExpectedDeliveries": 299700,
+    "totalActualUniqueDeliveries": 299700,
+    "totalMissingDeliveries": 0,
+    "totalDuplicateDeliveries": 0,
+    "totalUnexpectedDeliveries": 0,
+    "completenessPercentEachRun": 100,
+    "latencyP50RangeMs": "30-31",
+    "latencyP95RangeMs": "45-50",
+    "latencyP99RangeMs": "58-75",
+    "latencyMaxRangeMs": "70-98",
+    "roomGlobalOrderingOutOfOrderCountEachRun": 0
+  },
+  "claimBoundary": "Three local receiver-matrix runs on Docker Compose app-1/app-2. This is scenario verification, not a production performance claim or mixed traffic benchmark. ACCEPTED/PERSISTED ACKs are status diagnostics; recipient delivery is measured from receiver JSONL rows."
+}
