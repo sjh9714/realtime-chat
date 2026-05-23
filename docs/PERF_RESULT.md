@@ -3,7 +3,7 @@
 > 이 문서는 실시간 채팅 서비스의 성능 문제를 **발견 → 분석 → 해결 → 검증**하는 과정을 기록한다.
 > 단순히 "N+1을 해결했다"가 아니라, 어떤 문제가 있었고 왜 이 방식으로 해결했는지를 설명한다.
 >
-> 현재 수치는 주로 `GET /api/rooms` 중심의 REST 조회 최적화 결과다. WebSocket 수치는 연결 안정성 부하 테스트 결과이며, send-to-receive end-to-end latency나 메시지 전달 completeness를 측정한 결과로 해석하지 않는다.
+> 현재 수치는 주로 `GET /api/rooms` 중심의 REST 조회 최적화 결과다. WebSocket 연결 smoke 수치는 send-to-receive end-to-end latency나 메시지 전달 completeness를 측정한 결과로 해석하지 않는다. Receiver matrix 기반 recipient delivery 시나리오 검증은 [WebSocket measurement 문서](WEBSOCKET_MEASUREMENT.md)에 분리한다.
 
 ---
 
@@ -690,7 +690,7 @@ persisted message id 또는 Kafka offset 기반 sequence를 기록한 뒤 별도
 ### 4-4. 50-user receiver matrix repeat3
 
 같은 Docker Compose app-1/app-2 환경에서 50-user receiver matrix를 3회 반복했습니다. 이 실행은
-local scenario evidence이며, 500/1,000 session benchmark나 운영 성능 claim으로 확장하지 않습니다.
+local scenario evidence이며, 500/1,000 session 규모나 운영 성능 claim으로 확장하지 않습니다.
 
 | run | accepted sends | expected | unique | missing | duplicate | completeness | p50 | p95 | p99 | max |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -707,7 +707,7 @@ recipient 기준 local receiver matrix 반복 검증으로만 사용하고, mixe
 
 같은 Docker Compose app-1/app-2 환경에서 500-user receiver matrix를 3회 반복했습니다. 이 실행은
 accepted-send 기준 receiver fan-out 경로를 더 큰 단일 room에서 확인한 scenario evidence이며,
-1,000 session benchmark나 운영 성능 claim으로 확장하지 않습니다.
+운영 성능 claim으로 확장하지 않습니다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -720,8 +720,23 @@ accepted-send 기준 receiver fan-out 경로를 더 큰 단일 room에서 확인
 | 보존 위치 | `docs/evidence/receiver-matrix-500users-20260522-summary.json` |
 
 세 실행에서 PERSISTED status는 0건이므로 persisted-delivery 근거가 아니라 accepted-send 기준 receiver
-fan-out 검증으로만 해석합니다. 1,000 session benchmark, mixed traffic p95, room-global ordering은 별도
-측정 대상입니다.
+fan-out 검증으로만 해석합니다. mixed traffic p95와 production benchmark는 별도 측정 대상입니다.
+
+### 4-6. 1,000-user receiver matrix repeat3 local scenario
+
+같은 Docker Compose app-1/app-2 환경에서 1,000-user receiver matrix를 3회 반복했습니다. 이 실행은
+recipient delivery와 persisted DB `messageId` 기반 room-global ordering diagnostic을 확인한 local
+scenario evidence이며, mixed traffic 또는 운영 성능 claim으로 확장하지 않습니다.
+
+| run | accepted sends | persisted sends | expected | unique | missing | duplicate | completeness | p50 | p95 | p99 | max | room-global out-of-order |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 100 | 100 | 99,900 | 99,900 | 0 | 0 | 100% | 30ms | 45ms | 75ms | 98ms | 0 |
+| 2 | 100 | 100 | 99,900 | 99,900 | 0 | 0 | 100% | 31ms | 50ms | 75ms | 90ms | 0 |
+| 3 | 100 | 100 | 99,900 | 99,900 | 0 | 0 | 100% | 30ms | 45ms | 58ms | 70ms | 0 |
+
+요약은 `docs/evidence/receiver-matrix-1000users-repeat3-20260523-summary.json`와
+`docs/evidence/RECEIVER_MATRIX_1000USERS_REPEAT3_2026-05-23.md`에 보존했습니다. raw artifact root는
+`artifacts/ws/20260523T005158Z-receiver-matrix-1000users-repeat3`이며, git에는 포함하지 않습니다.
 
 같은 runner로 sender당 20 messages를 50ms 간격으로 보낸 smoke에서는 기본 SEND rate limit을 넘길 수
 있어 expected 360건 중 170건만 unique delivery로 관측했다. 당시 runner는 ACK/NACK/status 로그가 없어

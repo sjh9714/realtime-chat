@@ -20,6 +20,7 @@ writeJsonLines("send.jsonl", [
     senderUserId: "sender",
     clientMessageId: "accepted-message",
     sendStartedAtMs: 1000,
+    messageId: 101,
   },
   {
     roomId: "room-1",
@@ -32,6 +33,7 @@ writeJsonLines("send.jsonl", [
     senderUserId: "sender",
     clientMessageId: "persisted-only-message",
     sendStartedAtMs: 1000,
+    messageId: 102,
   },
   {
     roomId: "room-1",
@@ -44,6 +46,7 @@ writeJsonLines("send.jsonl", [
     senderUserId: "sender-2",
     clientMessageId: "accepted-message-room-2",
     sendStartedAtMs: 1000,
+    messageId: 201,
   },
 ]);
 writeJsonLines("receive.jsonl", [
@@ -52,6 +55,7 @@ writeJsonLines("receive.jsonl", [
     receiverUserId: "receiver-1",
     senderUserId: "sender",
     clientMessageId: "accepted-message",
+    messageId: 101,
     receivedAtMs: 1020,
   },
   {
@@ -59,6 +63,7 @@ writeJsonLines("receive.jsonl", [
     receiverUserId: "receiver-2",
     senderUserId: "sender",
     clientMessageId: "accepted-message",
+    messageId: 101,
     receivedAtMs: 1030,
   },
   {
@@ -66,6 +71,7 @@ writeJsonLines("receive.jsonl", [
     receiverUserId: "receiver-1",
     senderUserId: "sender",
     clientMessageId: "persisted-only-message",
+    messageId: 102,
     receivedAtMs: 1040,
   },
   {
@@ -73,6 +79,7 @@ writeJsonLines("receive.jsonl", [
     receiverUserId: "receiver-2",
     senderUserId: "sender",
     clientMessageId: "persisted-only-message",
+    messageId: 102,
     receivedAtMs: 1050,
   },
   {
@@ -87,6 +94,7 @@ writeJsonLines("receive.jsonl", [
     receiverUserId: "receiver-3",
     senderUserId: "sender-2",
     clientMessageId: "accepted-message-room-2",
+    messageId: 201,
     receivedAtMs: 1070,
   },
   {
@@ -103,12 +111,14 @@ writeJsonLines("status.jsonl", [
     userId: "sender",
     clientMessageId: "accepted-message",
     status: "accepted",
+    messageId: 101,
   },
   {
     roomId: "room-1",
     userId: "sender",
     clientMessageId: "persisted-only-message",
     status: "persisted",
+    messageId: 102,
   },
   {
     roomId: "room-1",
@@ -127,6 +137,7 @@ writeJsonLines("status.jsonl", [
     userId: "sender-2",
     clientMessageId: "accepted-message-room-2",
     status: "accepted",
+    messageId: 201,
   },
 ]);
 
@@ -160,7 +171,110 @@ assertEqual(summary.byRoom["room-2"].expectedDeliveries, 1, "room-2 expected");
 assertEqual(summary.byRoom["room-2"].actualUniqueDeliveries, 1, "room-2 actual");
 assertEqual(summary.byRoom["room-2"].unexpectedDeliveries, 1, "room-2 unexpected");
 assertEqual(summary.byRoom["room-2"].missingDeliveries, 0, "room-2 missing");
+assertEqual(
+  summary.roomGlobalOrdering.source,
+  "persistedMessageId",
+  "room-global order source",
+);
+assertEqual(
+  summary.roomGlobalOrdering.comparableDeliveries,
+  5,
+  "room-global comparable deliveries",
+);
+assertEqual(
+  summary.roomGlobalOrdering.outOfOrderCount,
+  0,
+  "room-global out-of-order count",
+);
+assertEqual(
+  summary.byRoom["room-1"].roomGlobalOrdering.comparableDeliveries,
+  4,
+  "room-1 room-global comparable deliveries",
+);
 assertEqual(summary.mixedHttp.totalRequests, 0, "no HTTP probes by default");
+
+writeJsonLines("receive.jsonl", [
+  {
+    roomId: "room-1",
+    receiverUserId: "receiver-1",
+    senderUserId: "sender",
+    clientMessageId: "persisted-only-message",
+    messageId: 102,
+    receivedAtMs: 1040,
+  },
+  {
+    roomId: "room-1",
+    receiverUserId: "receiver-1",
+    senderUserId: "sender",
+    clientMessageId: "accepted-message",
+    messageId: 101,
+    receivedAtMs: 1050,
+  },
+]);
+
+const outOfOrderSummary = runDeliveryMatrix();
+assertEqual(
+  outOfOrderSummary.roomGlobalOrdering.outOfOrderCount,
+  1,
+  "persisted message id detects room-global out-of-order delivery",
+);
+
+writeJsonLines("receive.jsonl", [
+  {
+    roomId: "room-1",
+    receiverUserId: "receiver-1",
+    senderUserId: "sender",
+    clientMessageId: "accepted-message",
+    messageId: 101,
+    receivedAtMs: 1020,
+  },
+  {
+    roomId: "room-1",
+    receiverUserId: "receiver-2",
+    senderUserId: "sender",
+    clientMessageId: "accepted-message",
+    messageId: 101,
+    receivedAtMs: 1030,
+  },
+  {
+    roomId: "room-1",
+    receiverUserId: "receiver-1",
+    senderUserId: "sender",
+    clientMessageId: "persisted-only-message",
+    messageId: 102,
+    receivedAtMs: 1040,
+  },
+  {
+    roomId: "room-1",
+    receiverUserId: "receiver-2",
+    senderUserId: "sender",
+    clientMessageId: "persisted-only-message",
+    messageId: 102,
+    receivedAtMs: 1050,
+  },
+  {
+    roomId: "room-1",
+    receiverUserId: "receiver-1",
+    senderUserId: "sender",
+    clientMessageId: "statusless-message",
+    receivedAtMs: 1060,
+  },
+  {
+    roomId: "room-2",
+    receiverUserId: "receiver-3",
+    senderUserId: "sender-2",
+    clientMessageId: "accepted-message-room-2",
+    messageId: 201,
+    receivedAtMs: 1070,
+  },
+  {
+    roomId: "room-2",
+    receiverUserId: "receiver-3",
+    senderUserId: "sender",
+    clientMessageId: "accepted-message",
+    receivedAtMs: 1080,
+  },
+]);
 
 writeJsonLines("http.jsonl", [
   {
