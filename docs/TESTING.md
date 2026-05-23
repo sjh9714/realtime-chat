@@ -21,6 +21,7 @@
 | receiver matrix by-room guard | `docs/evidence/DELIVERY_MATRIX_BY_ROOM_GUARD_2026-05-22.md` | cross-room receive가 aggregate에 묻히지 않고 해당 room의 unexpected delivery로 기록됨 |
 | receiver matrix 50-user repeat3 | `scripts/ws-delivery-runner.mjs`, `scripts/delivery-matrix.mjs`, `docs/evidence/receiver-matrix-50users-repeat3-20260522-summary.json` | local Docker Compose app-1/app-2에서 3회 모두 expected 4,900 / unique 4,900 / missing 0 / duplicate 0 |
 | receiver matrix 500-user repeat3 | `scripts/ws-delivery-runner.mjs`, `scripts/delivery-matrix.mjs`, `docs/evidence/receiver-matrix-500users-20260522-summary.json` | local Docker Compose app-1/app-2에서 3회 모두 expected 49,900 / unique 49,900 / missing 0 / duplicate 0 |
+| mixed HTTP probe 10-room/50-user repeat3 | `scripts/ws-delivery-runner.mjs --mixed-http-probes true`, `scripts/validate-delivery-evidence.mjs`, `docs/evidence/mixed-traffic-10rooms-50users-repeat3-20260523-summary.json` | local single app에서 3회 모두 expected 4,900 / unique 4,900 / missing 0 / duplicate 0, mixed HTTP failed 0 |
 | DLT replay idempotency | Testcontainers integration | `messageKey` 기준 중복 저장 방지 |
 | DLT replay metric | `DltReplayServiceTest` | manual replay 재발행 성공 시 `chat.messages.dlt.replayed` 기록 |
 | rooms cache eviction metric | `MessagePersistenceConsumerCacheTest` | 메시지 저장 후 room member cache eviction counter 기록 |
@@ -30,10 +31,10 @@
 
 | 범위 | 현재 상태 |
 | --- | --- |
-| 1,000 session send-to-receive p50/p95/p99 | 추가 측정 예정 |
-| 1,000 session receiver delivery completeness | 50-user repeat3와 500-user repeat3는 시나리오 검증이며 public benchmark가 아님 |
-| room-global ordering benchmark | sender-local diagnostic만 있고 room-global sequence 기준 측정은 아직 없음 |
-| mixed traffic p95 | `k6/mixed-chat-test.js` local smoke는 통과, benchmark는 추가 측정 예정 |
+| production 1,000 session send-to-receive p50/p95/p99 | 1,000-user local repeat3는 시나리오 검증, production benchmark는 추가 측정 예정 |
+| production 1,000 session receiver delivery completeness | 1,000-user local repeat3는 시나리오 검증이며 public benchmark가 아님 |
+| room-global ordering benchmark | persisted message id 기준 local diagnostic은 있으나 production benchmark는 아직 없음 |
+| production mixed traffic p95 | 10-room/50-user local mixed HTTP probe repeat3는 시나리오 검증, production/cache hit benchmark는 추가 측정 예정 |
 | Redis rate-limit 알고리즘 비교 | fixed-window 한계를 문서화했고 sliding window/token bucket 비교는 아직 없음 |
 
 ## 실행 명령
@@ -57,4 +58,5 @@ node scripts/delivery-matrix-smoke-test.mjs
   delivery completeness 분모에 섞지 않습니다.
 - mixed chat smoke는 REST 조회, WebSocket 연결, ACK, 발신자 self echo, read receipt 경로 실행 확인이며
   공개 mixed traffic benchmark가 아닙니다.
+- 10-room/50-user mixed HTTP probe repeat3는 local 단일 앱 시나리오 검증이며 production benchmark가 아닙니다.
 - 실시간 메시징 품질 claim은 latency, completeness, duplicate, ordering을 함께 기록한 뒤 올립니다.

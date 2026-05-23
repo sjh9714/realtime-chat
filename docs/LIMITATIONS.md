@@ -7,10 +7,10 @@ artifact가 보존된 뒤에만 추가합니다.
 
 | 항목 | 현재 상태 | 다음 보강 |
 | --- | --- | --- |
-| send-to-receive latency | local receiver snapshot은 있으나 반복 benchmark는 추가 측정 예정 | receiver clock, clientMessageId join, 실행 환경을 고정한 반복 benchmark 실행 |
-| delivery completeness | 50-user repeat3와 500-user repeat3 local scenario는 있으나 public delivery benchmark는 아님 | 10 rooms / room당 50 users, 1,000 sessions 측정 |
-| room-global ordering | sender-local diagnostic만 있음 | persisted message id 또는 Kafka offset 기반 room-global sequence 기록 |
-| mixed traffic p95 | local smoke는 통과했지만 반복 benchmark 결과는 추가 측정 예정 | 읽기/쓰기/receipt/cache hit ratio를 분리해 기록 |
+| send-to-receive latency | 50/500/1,000-user receiver matrix와 10-room mixed HTTP probe local repeat3는 시나리오 검증, production benchmark는 아님 | receiver clock, clientMessageId join, 실행 환경을 고정한 production benchmark 실행 |
+| delivery completeness | 50/500/1,000-user receiver matrix와 10-room mixed HTTP probe local repeat3는 시나리오 검증, public delivery benchmark는 아님 | production에 가까운 환경과 장시간 반복 측정 |
+| room-global ordering | 1,000-user receiver matrix와 10-room mixed HTTP probe에서 persisted message id 기준 local diagnostic 기록 | Kafka offset 기반 room-global sequence와 운영 환경 반복 측정 |
+| mixed traffic p95 | 10-room/50-user local mixed HTTP probe repeat3는 시나리오 검증으로 기록, production/cache hit benchmark는 추가 측정 예정 | 읽기/쓰기/receipt/cache hit ratio를 분리해 기록 |
 | Redis rate-limit smoothing | fixed-window 구현 | sliding window/token bucket과 burst 비교 |
 | production 운영성 | runbook 초안과 테스트 중심 | replay audit, dashboard, alert, SLO 검증 |
 

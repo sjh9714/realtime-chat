@@ -3,9 +3,9 @@
 이 문서는 WebSocket 메시지의 send-to-receive latency와 delivery completeness를 측정하기 위한 계획이다.
 
 receiver matrix low-rate baseline, 50-user local receiver repeat3, 500-user local receiver repeat3,
-1,000-user local receiver repeat3는 측정 도구와 fan-out 경로 검증 근거로 보존한다. 다만 반복 실행,
-clock/환경 기록이 충분한 공개 latency, delivery completeness, mixed traffic benchmark는 아직 없으므로
-production/mixed benchmark는 `추가 측정 예정`으로 유지한다.
+1,000-user local receiver repeat3, 10-room/50-user mixed HTTP probe repeat3는 측정 도구와 fan-out
+경로 검증 근거로 보존한다. 다만 production latency, 장시간 soak, cache hit ratio, 1,000-session mixed
+benchmark는 아직 없으므로 production/mixed benchmark는 `추가 측정 예정`으로 유지한다.
 
 ## 1. 측정하지 않는 것
 
@@ -428,12 +428,38 @@ mixed error rate: 0%
 관측이므로 실제 receiver 기준 delivery completeness, send-to-receive latency, room-global ordering
 benchmark로 사용하지 않습니다.
 
+### 5-6. 2026-05-23 10-room / 50-user mixed HTTP probe repeat3
+
+2026-05-23에 local JVM 단일 앱과 격리된 Docker Postgres/Redis/Kafka 환경에서 `--mixed-http-probes true`
+를 켠 receiver matrix를 3회 반복했습니다. 이 실행은 REST room list / message history / read receipt probe를
+같은 artifact에 남기면서 receiver 기준 send-to-receive latency와 delivery completeness를 검산한 local
+scenario evidence입니다. HTTP probe는 WebSocket drain 이후 실행되며, receiver delivery denominator에는
+포함하지 않습니다.
+
+| run | accepted sends | persisted sends | expected | unique | missing | duplicate | completeness | p50 | p95 | p99 | max | HTTP failed | room-global out-of-order |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 100 | 100 | 4,900 | 4,900 | 0 | 0 | 100% | 13ms | 20ms | 39ms | 81ms | 0 / 30 | 0 |
+| 2 | 100 | 100 | 4,900 | 4,900 | 0 | 0 | 100% | 13ms | 18ms | 20ms | 23ms | 0 / 30 | 0 |
+| 3 | 100 | 100 | 4,900 | 4,900 | 0 | 0 | 100% | 13ms | 20ms | 26ms | 27ms | 0 / 30 | 0 |
+
+요약 JSON은
+[`docs/evidence/mixed-traffic-10rooms-50users-repeat3-20260523-summary.json`](evidence/mixed-traffic-10rooms-50users-repeat3-20260523-summary.json)에
+보존했습니다. 요약 문서는
+[`docs/evidence/MIXED_TRAFFIC_10ROOMS_50USERS_REPEAT3_2026-05-23.md`](evidence/MIXED_TRAFFIC_10ROOMS_50USERS_REPEAT3_2026-05-23.md)에
+분리했습니다. raw artifact root는
+`artifacts/ws/20260523T014727Z-mixed-traffic-10rooms-50users-repeat3`이며, `artifacts/`는 local generated
+artifact로 git에 포함하지 않습니다.
+
+세 run 모두 `node scripts/validate-delivery-evidence.mjs --artifact-dir <run-dir>`를 통과했습니다. 이 결과는
+local 단일 앱 반복 실행이므로 multi-instance scale-out, 1,000-session mixed benchmark, production benchmark,
+cache hit ratio로 확장하지 않습니다.
+
 ## 6. 권장 시나리오
 
 | 시나리오 | 목적 | 상태 |
 | --- | --- | --- |
 | 1 room, 50 users | 단일 hot room fan-out | local repeat3 기록, public benchmark는 추가 측정 예정 |
-| 10 rooms, room당 50 users | room 분산 traffic | runner option 준비, 실제 benchmark는 추가 측정 예정 |
+| 10 rooms, room당 50 users | room 분산 traffic + mixed HTTP probe | local repeat3 기록, production benchmark는 추가 측정 예정 |
 | 500 concurrent WebSocket sessions | 중간 규모 동시 연결 | local repeat3 기록, public benchmark는 추가 측정 예정 |
 | 1,000 concurrent WebSocket sessions | 높은 동시 연결 | local repeat3 기록, public/mixed benchmark는 추가 측정 예정 |
 | 10 msg/s | 낮은 전송률 baseline | 50-user local snapshot 후보, 반복 benchmark는 추가 측정 예정 |

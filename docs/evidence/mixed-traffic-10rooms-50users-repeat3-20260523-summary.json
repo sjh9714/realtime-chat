@@ -1,0 +1,147 @@
+{
+  "scenario": "mixed-traffic-10rooms-50users-repeat3-local",
+  "date": "2026-05-23",
+  "runtime": "local JVM single app on localhost:8081 with isolated Docker Postgres/Redis/Kafka",
+  "sourceArtifactRoot": "artifacts/ws/20260523T014727Z-mixed-traffic-10rooms-50users-repeat3",
+  "rooms": 10,
+  "usersPerRoom": 50,
+  "totalSessions": 500,
+  "sendersPerRoom": 1,
+  "messagesPerSender": 10,
+  "sendIntervalMs": 100,
+  "mixedHttpProbeUsersPerRoom": 1,
+  "runs": [
+    {
+      "run": 1,
+      "artifact": "artifacts/ws/20260523T014727Z-mixed-traffic-10rooms-50users-repeat3/run-1",
+      "acceptedSends": 100,
+      "persistedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 13,
+        "p90": 17,
+        "p95": 20,
+        "p99": 39,
+        "max": 81
+      },
+      "roomGlobalOrdering": {
+        "source": "persistedMessageId",
+        "comparableDeliveries": 4900,
+        "outOfOrderCount": 0
+      },
+      "mixedHttp": {
+        "totalRequests": 30,
+        "okRequests": 30,
+        "failedRequests": 0,
+        "p95ByOperationMs": {
+          "message_history": 13,
+          "read_receipt": 19,
+          "rooms_list": 21
+        }
+      }
+    },
+    {
+      "run": 2,
+      "artifact": "artifacts/ws/20260523T014727Z-mixed-traffic-10rooms-50users-repeat3/run-2",
+      "acceptedSends": 100,
+      "persistedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 13,
+        "p90": 17,
+        "p95": 18,
+        "p99": 20,
+        "max": 23
+      },
+      "roomGlobalOrdering": {
+        "source": "persistedMessageId",
+        "comparableDeliveries": 4900,
+        "outOfOrderCount": 0
+      },
+      "mixedHttp": {
+        "totalRequests": 30,
+        "okRequests": 30,
+        "failedRequests": 0,
+        "p95ByOperationMs": {
+          "message_history": 10,
+          "read_receipt": 9,
+          "rooms_list": 16
+        }
+      }
+    },
+    {
+      "run": 3,
+      "artifact": "artifacts/ws/20260523T014727Z-mixed-traffic-10rooms-50users-repeat3/run-3",
+      "acceptedSends": 100,
+      "persistedSends": 100,
+      "failedSends": 0,
+      "statuslessSends": 0,
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 13,
+        "p90": 17,
+        "p95": 20,
+        "p99": 26,
+        "max": 27
+      },
+      "roomGlobalOrdering": {
+        "source": "persistedMessageId",
+        "comparableDeliveries": 4900,
+        "outOfOrderCount": 0
+      },
+      "mixedHttp": {
+        "totalRequests": 30,
+        "okRequests": 30,
+        "failedRequests": 0,
+        "p95ByOperationMs": {
+          "message_history": 14,
+          "read_receipt": 14,
+          "rooms_list": 25
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "totalAcceptedSends": 300,
+    "totalPersistedSends": 300,
+    "totalExpectedDeliveries": 14700,
+    "totalActualUniqueDeliveries": 14700,
+    "totalMissingDeliveries": 0,
+    "totalDuplicateDeliveries": 0,
+    "totalUnexpectedDeliveries": 0,
+    "totalMixedHttpRequests": 90,
+    "totalMixedHttpFailedRequests": 0,
+    "latencyP50RangeMs": "13-13",
+    "latencyP95RangeMs": "18-20",
+    "latencyP99RangeMs": "20-39",
+    "latencyMaxRangeMs": "23-81",
+    "roomGlobalOrderingOutOfOrderCountEachRun": [
+      0,
+      0,
+      0
+    ]
+  },
+  "claimBoundary": "Three local runs with mixed HTTP probes in validated receiver-matrix artifacts. This is scenario verification for local evidence, not a production performance claim. The HTTP probes are recorded in the same artifact after WebSocket drain; receiver delivery p95 is measured from send/receive JSONL rows."
+}

@@ -287,8 +287,8 @@ GET /api/rooms/{roomId}/messages/sync?afterMessageId={lastReceivedMessageId}&lim
 
 - REST 조회 성능 결과는 채팅방 목록 API 최적화, N+1 제거, Redis cache 효과를 확인한 결과다.
 - 기존 WebSocket k6 결과는 연결 안정성과 제한된 send/receive smoke 성격이다.
-- send-to-receive end-to-end latency, 수신 completeness, 메시지 순서 정확도는 아직 성능 결과로 기록하지 않는다.
-- `k6/mixed-chat-test.js`는 조회, WebSocket 전송, ACK/NACK, 읽음 처리를 함께 수행하는 시나리오다. 2026-05-22 local smoke는 통과했지만, receiver 기준 send-to-receive latency/completeness와 반복 benchmark 수치는 추가 측정 예정이다.
+- send-to-receive end-to-end latency, 수신 completeness, 메시지 순서 정확도는 local 시나리오 검증과 production benchmark를 분리해 기록한다.
+- `k6/mixed-chat-test.js`는 조회, WebSocket 전송, ACK/NACK, 읽음 처리를 함께 수행하는 시나리오다. 2026-05-22 local smoke는 통과했다. receiver 기준 수치는 2026-05-23 10-room/50-user mixed HTTP probe repeat3에서 local 시나리오 검증으로 기록했으며, production benchmark는 추가 측정 예정이다.
 
 ## 현재 한계
 
@@ -301,4 +301,4 @@ GET /api/rooms/{roomId}/messages/sync?afterMessageId={lastReceivedMessageId}&lim
 - `chat.messages.dlt` replay만 manual utility로 제공한다. `chat.read-receipts.dlt` replay 자동화는 별도 과제다.
 - Presence heartbeat는 클라이언트 협조가 필요하다.
 - DLT replay는 내부 service utility이며 운영용 API, 권한 제어, 감사 로그는 아직 없다.
-- k6 mixed scenario는 local smoke로 주요 경로 실행을 확인했지만, receiver 기준 성능 수치와 반복 benchmark 결과는 별도 실행 후 기록해야 한다.
+- k6 mixed scenario는 local smoke로 주요 경로 실행을 확인했고, receiver 기준 10-room/50-user mixed HTTP probe repeat3는 local 시나리오 검증으로 기록했다. production benchmark와 cache hit ratio는 별도 실행 후 기록해야 한다.
