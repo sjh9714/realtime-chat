@@ -1,15 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="720" viewBox="0 0 1240 720" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="760" viewBox="0 0 1260 760" role="img" aria-labelledby="title desc">
   <title id="title">Realtime Chat overall architecture</title>
-  <desc id="desc">Simplified architecture diagram for Realtime Chat showing WebSocket connection, STOMP authorization, Kafka publish by roomId, persistence, fan-out, REST APIs, Redis presence/cache/rate limit, PostgreSQL recovery truth, and DLT boundary.</desc>
+  <desc id="desc">Simplified README architecture showing WebSocket STOMP authorization, Kafka publish by roomId, PostgreSQL recovery truth, Redis presence/cache/rate limit, receiver fan-out, reconnect sync, and DLT boundary.</desc>
   <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L0,6 L9,3 z" fill="#334155"/>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
+    </marker>
+    <marker id="soft-arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#64748b"/>
     </marker>
     <style>
       .bg { fill: #ffffff; }
-      .panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.2; rx: 14; }
-      .zone { fill: #ffffff; stroke: #e2e8f0; stroke-width: 1.2; rx: 12; }
-      .node { fill: #ffffff; stroke: #334155; stroke-width: 1.5; rx: 10; }
+      .panel { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.4; }
+      .zone { fill: #ffffff; stroke: #e2e8f0; stroke-width: 1.2; }
+      .node { fill: #ffffff; stroke: #334155; stroke-width: 1.6; }
       .client { fill: #f8fafc; }
       .app { fill: #ecfeff; stroke: #0e7490; }
       .stream { fill: #fff7ed; stroke: #c2410c; }
@@ -17,128 +20,96 @@
       .redis { fill: #f0fdf4; stroke: #15803d; }
       .db { fill: #eef2ff; stroke: #4338ca; }
       .dlt { fill: #fef2f2; stroke: #b91c1c; }
+      .arrow { fill: none; stroke: #334155; stroke-width: 2; marker-end: url(#arrow); }
+      .softArrow { fill: none; stroke: #64748b; stroke-width: 1.8; stroke-dasharray: 6 5; marker-end: url(#soft-arrow); }
       .title { fill: #0f172a; font-family: Arial, sans-serif; font-size: 28px; font-weight: 700; }
       .subtitle { fill: #475569; font-family: Arial, sans-serif; font-size: 15px; }
       .label { fill: #0f172a; font-family: Arial, sans-serif; font-size: 17px; font-weight: 700; }
       .small { fill: #334155; font-family: Arial, sans-serif; font-size: 13px; }
       .tiny { fill: #475569; font-family: Arial, sans-serif; font-size: 12px; }
       .zoneLabel { fill: #475569; font-family: Arial, sans-serif; font-size: 13px; font-weight: 700; }
-      .arrow { fill: none; stroke: #334155; stroke-width: 1.8; marker-end: url(#arrow); }
-      .softArrow { fill: none; stroke: #64748b; stroke-width: 1.5; stroke-dasharray: 5 4; marker-end: url(#arrow); }
     </style>
   </defs>
 
-  <rect class="bg" width="1240" height="720"/>
-  <rect class="panel" x="24" y="24" width="1192" height="672"/>
+  <rect class="bg" width="1260" height="760"/>
+  <rect class="panel" x="30" y="30" width="1200" height="690" rx="16"/>
 
-  <text class="title" x="54" y="66">Realtime Chat 전체 아키텍처</text>
-  <text class="subtitle" x="54" y="94">구현된 핵심 흐름과 검증 대상 경계를 설명하는 단순화된 구조도입니다.</text>
+  <text class="title" x="60" y="74">Realtime Chat 전체 아키텍처</text>
+  <text class="subtitle" x="60" y="102">WebSocket 연결, Kafka publish, DB persistence, receiver fan-out, reconnect recovery를 분리해 설명하는 구조도입니다.</text>
 
-  <rect class="zone" x="48" y="122" width="220" height="500"/>
-  <text class="zoneLabel" x="68" y="150">Client boundary</text>
+  <rect class="zone" x="60" y="136" width="220" height="520" rx="12"/>
+  <text class="zoneLabel" x="82" y="166">Client boundary</text>
 
-  <rect class="zone" x="300" y="122" width="250" height="500"/>
-  <text class="zoneLabel" x="320" y="150">Spring Boot app boundary</text>
+  <rect class="zone" x="320" y="136" width="260" height="520" rx="12"/>
+  <text class="zoneLabel" x="342" y="166">Spring Boot app boundary</text>
 
-  <rect class="zone" x="582" y="122" width="256" height="500"/>
-  <text class="zoneLabel" x="602" y="150">Kafka processing boundary</text>
+  <rect class="zone" x="620" y="136" width="250" height="520" rx="12"/>
+  <text class="zoneLabel" x="642" y="166">Kafka processing boundary</text>
 
-  <rect class="zone" x="870" y="122" width="300" height="500"/>
-  <text class="zoneLabel" x="890" y="150">State and recovery boundary</text>
+  <rect class="zone" x="910" y="136" width="280" height="520" rx="12"/>
+  <text class="zoneLabel" x="932" y="166">State and recovery boundary</text>
 
-  <rect class="node client" x="82" y="250" width="150" height="78"/>
-  <text class="label" x="130" y="283">Client</text>
-  <text class="small" x="104" y="306">WebSocket STOMP</text>
+  <rect class="node client" x="94" y="278" width="152" height="78" rx="8"/>
+  <text class="label" x="170" y="310" text-anchor="middle">Client</text>
+  <text class="small" x="170" y="334" text-anchor="middle">WebSocket STOMP</text>
 
-  <rect class="node app" x="330" y="176" width="190" height="72"/>
-  <text class="label" x="362" y="204">WebSocket Endpoint</text>
-  <text class="small" x="364" y="227">CONNECT / SUBSCRIBE / SEND</text>
+  <rect class="node app" x="354" y="190" width="192" height="76" rx="8"/>
+  <text class="label" x="450" y="220" text-anchor="middle">WebSocket Endpoint</text>
+  <text class="small" x="450" y="244" text-anchor="middle">CONNECT / SUBSCRIBE / SEND</text>
 
-  <rect class="node app" x="330" y="276" width="190" height="72"/>
-  <text class="label" x="378" y="304">STOMP Auth</text>
-  <text class="small" x="360" y="327">JWT auth + room membership</text>
+  <rect class="node app" x="354" y="302" width="192" height="76" rx="8"/>
+  <text class="label" x="450" y="332" text-anchor="middle">STOMP Auth</text>
+  <text class="small" x="450" y="356" text-anchor="middle">JWT + room membership</text>
 
-  <rect class="node app" x="330" y="376" width="190" height="72"/>
-  <text class="label" x="356" y="404">Message Producer</text>
-  <text class="small" x="360" y="427">ACK/NACK = Kafka publish</text>
+  <rect class="node app" x="354" y="414" width="192" height="76" rx="8"/>
+  <text class="label" x="450" y="444" text-anchor="middle">Message Producer</text>
+  <text class="small" x="450" y="468" text-anchor="middle">ACK/NACK = Kafka publish</text>
 
-  <rect class="node app" x="330" y="492" width="190" height="76"/>
-  <text class="label" x="354" y="520">REST Chat Room API</text>
-  <text class="small" x="371" y="543">rooms / read state</text>
+  <rect class="node app" x="354" y="542" width="192" height="76" rx="8"/>
+  <text class="label" x="450" y="572" text-anchor="middle">REST Chat Room API</text>
+  <text class="small" x="450" y="596" text-anchor="middle">rooms / read state</text>
 
-  <rect class="node app" x="82" y="400" width="150" height="72"/>
-  <text class="label" x="91" y="428">Reconnect Sync API</text>
-  <text class="small" x="105" y="451">lastReceivedMessageId</text>
+  <rect class="node stream" x="650" y="286" width="190" height="92" rx="8"/>
+  <text class="label" x="745" y="318" text-anchor="middle">Kafka Topic</text>
+  <text class="small" x="745" y="344" text-anchor="middle">chat.messages</text>
+  <text class="small" x="745" y="366" text-anchor="middle">key = roomId</text>
 
-  <rect class="node stream" x="612" y="248" width="196" height="90"/>
-  <text class="label" x="625" y="280">Kafka Topic by roomId</text>
-  <text class="small" x="649" y="304">chat.messages</text>
-  <text class="small" x="657" y="325">key = roomId</text>
+  <rect class="node consumer" x="650" y="444" width="190" height="84" rx="8"/>
+  <text class="label" x="745" y="476" text-anchor="middle">Kafka Consumer</text>
+  <text class="small" x="745" y="500" text-anchor="middle">persist / fan-out paths</text>
 
-  <rect class="node consumer" x="612" y="390" width="196" height="76"/>
-  <text class="label" x="654" y="419">Kafka Consumer</text>
-  <text class="small" x="642" y="442">persist / broadcast paths</text>
+  <rect class="node db" x="940" y="268" width="210" height="98" rx="8"/>
+  <text class="label" x="1045" y="302" text-anchor="middle">PostgreSQL</text>
+  <text class="small" x="1045" y="328" text-anchor="middle">Message / Room / Read State</text>
+  <text class="small" x="1045" y="350" text-anchor="middle">reconnect recovery truth</text>
 
-  <rect class="node consumer" x="612" y="516" width="196" height="72"/>
-  <text class="label" x="682" y="545">Fan-out</text>
-  <text class="small" x="643" y="568">room topic delivery to receivers</text>
+  <rect class="node redis" x="940" y="408" width="210" height="82" rx="8"/>
+  <text class="label" x="1045" y="438" text-anchor="middle">Redis</text>
+  <text class="small" x="1045" y="462" text-anchor="middle">Presence / Cache / Rate Limit</text>
 
-  <rect class="node redis" x="900" y="170" width="220" height="72"/>
-  <text class="label" x="954" y="199">Redis Presence</text>
-  <text class="small" x="939" y="222">ephemeral session TTL</text>
+  <rect class="node dlt" x="940" y="548" width="210" height="78" rx="8"/>
+  <text class="label" x="1045" y="578" text-anchor="middle">DLT</text>
+  <text class="small" x="1045" y="602" text-anchor="middle">failed consumer isolation</text>
 
-  <rect class="node redis" x="900" y="272" width="220" height="78"/>
-  <text class="label" x="920" y="302">Redis Cache / Rate Limit</text>
-  <text class="small" x="930" y="325">rooms cache, SEND limit</text>
+  <rect class="node client" x="94" y="498" width="152" height="78" rx="8"/>
+  <text class="label" x="170" y="528" text-anchor="middle">Reconnect Sync</text>
+  <text class="small" x="170" y="552" text-anchor="middle">lastReceivedMessageId</text>
 
-  <rect class="node db" x="900" y="400" width="220" height="92"/>
-  <text class="label" x="924" y="430">PostgreSQL</text>
-  <text class="small" x="916" y="453">Message / Room / Read State</text>
-  <text class="small" x="933" y="474">recovery truth for sync</text>
+  <path class="arrow" d="M246 317 H300 V228 H354"/>
+  <path class="arrow" d="M450 266 V302"/>
+  <text class="tiny" x="462" y="288">authorize</text>
+  <path class="arrow" d="M450 378 V414"/>
+  <text class="tiny" x="462" y="402">SEND allowed</text>
+  <path class="arrow" d="M546 452 H610 V332 H650"/>
+  <text class="tiny" x="566" y="438">Kafka publish by roomId</text>
+  <path class="arrow" d="M745 378 V444"/>
+  <text class="tiny" x="760" y="414">consume</text>
+  <path class="arrow" d="M840 468 H900 V317 H940"/>
+  <path class="arrow" d="M246 537 H300 V580 H354"/>
+  <path class="softArrow" d="M546 220 H890 V449 H940"/>
+  <text class="tiny" x="656" y="208">presence heartbeat / disconnect</text>
+  <path class="softArrow" d="M840 486 H900 V587 H940"/>
 
-  <rect class="node dlt" x="900" y="540" width="220" height="68"/>
-  <text class="label" x="994" y="568">DLT</text>
-  <text class="small" x="952" y="591">failed consumer isolation</text>
-
-  <path class="arrow" d="M232 276 H330"/>
-  <text class="tiny" x="244" y="265">separate WebSocket connection</text>
-
-  <path class="arrow" d="M425 248 V276"/>
-  <text class="tiny" x="436" y="268">authorize</text>
-
-  <path class="arrow" d="M425 348 V376"/>
-  <text class="tiny" x="436" y="370">SEND allowed</text>
-
-  <path class="arrow" d="M520 412 C558 412 574 293 612 293"/>
-  <text class="tiny" x="538" y="351">Kafka publish by roomId</text>
-
-  <path class="arrow" d="M710 338 V390"/>
-  <text class="tiny" x="724" y="369">consume</text>
-
-  <path class="arrow" d="M808 428 H900"/>
-  <text class="tiny" x="825" y="416">DB persisted</text>
-
-  <path class="arrow" d="M710 466 V516"/>
-  <text class="tiny" x="724" y="495">broadcast</text>
-
-  <path class="arrow" d="M612 552 C420 650 232 595 157 472"/>
-  <text class="tiny" x="278" y="635">receiver delivery over subscribed room topic</text>
-
-  <path class="softArrow" d="M520 210 C664 158 806 184 900 206"/>
-  <text class="tiny" x="619" y="171">presence heartbeat / disconnect</text>
-
-  <path class="softArrow" d="M520 530 H900"/>
-  <text class="tiny" x="593" y="518">room list cache + rate limit state</text>
-
-  <path class="arrow" d="M232 436 H330"/>
-  <text class="tiny" x="246" y="424">lastReceivedMessageId</text>
-
-  <path class="arrow" d="M520 530 C650 520 763 469 900 446"/>
-  <text class="tiny" x="604" y="492">reconnect sync reads recovery truth</text>
-
-  <path class="softArrow" d="M808 428 C860 452 862 556 900 574"/>
-  <text class="tiny" x="820" y="523">failure isolation</text>
-
-  <text class="small" x="54" y="658">Core: WebSocket connection, Kafka publish, DB persisted, receiver delivery are separate boundaries.</text>
-  <text class="small" x="54" y="680">Redis Presence is ephemeral. PostgreSQL is the recovery truth for reconnect sync.</text>
+  <text class="small" x="60" y="688">Core: WebSocket connection, Kafka publish, DB persisted, receiver delivery are separate boundaries.</text>
+  <text class="small" x="60" y="712">Redis Presence is ephemeral. PostgreSQL is the recovery truth for reconnect sync.</text>
 </svg>

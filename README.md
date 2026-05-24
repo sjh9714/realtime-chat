@@ -726,8 +726,8 @@ k6 run \
 | [`docs/WEBSOCKET_MEASUREMENT.md`](docs/WEBSOCKET_MEASUREMENT.md) | send-to-receive latency와 delivery completeness 측정 계획 |
 | [`docs/REDIS_LIMITATIONS.md`](docs/REDIS_LIMITATIONS.md) | Redis fixed-window rate limit과 cache hit rate 한계 |
 | [`docs/STUDY_GUIDE.md`](docs/STUDY_GUIDE.md) | 코드 흐름 학습 가이드 |
-| [`docs/architecture.drawio`](docs/architecture.drawio) | README 컨테이너 다이어그램 원본 |
-| [`docs/assets/architecture/overall-architecture.drawio`](docs/assets/architecture/overall-architecture.drawio) | README 전체 아키텍처 다이어그램 원본 |
+| [`docs/architecture.drawio`](docs/architecture.drawio) | 이전 컨테이너 다이어그램 참고 자산 |
+| [`docs/assets/architecture/overall-architecture.drawio`](docs/assets/architecture/overall-architecture.drawio) | README 전체 아키텍처 편집 참고 자산 |
 
 `monitoring/`의 Prometheus/Grafana 파일은 local template입니다. `/actuator/prometheus`에서 metric과
 quantile panel을 직접 검증한 운영 dashboard 증거로 사용하지 않습니다.

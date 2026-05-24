@@ -6,7 +6,8 @@
 
 ![Realtime Chat 전체 아키텍처](assets/architecture/overall-architecture.svg)
 
-다이어그램 원본은 [`docs/assets/architecture/overall-architecture.drawio`](assets/architecture/overall-architecture.drawio)이고, README와 이 문서에서는 SVG export를 사용합니다.
+README와 이 문서에서는 [`overall-architecture.svg`](assets/architecture/overall-architecture.svg)를 기준으로 노출합니다.
+[`overall-architecture.drawio`](assets/architecture/overall-architecture.drawio)는 편집 참고 자산으로 보관합니다.
 
 ## 핵심 흐름
 
