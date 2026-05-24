@@ -230,9 +230,13 @@ PERSISTED payload 예시:
 }
 ```
 
-> ACCEPTED ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻입니다. PERSISTED ACK는 DB 저장 완료 또는 기존 idempotent row 확인을 뜻합니다. 둘 다 Redis Pub/Sub broadcast 완료, 상대 클라이언트 수신 완료, 읽음 완료를 의미하지 않습니다.
+> ACCEPTED ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻입니다.
+> PERSISTED ACK는 DB 저장 완료 또는 기존 idempotent row 확인을 뜻합니다.
+> 둘 다 Redis Pub/Sub broadcast 완료, 상대 클라이언트 수신 완료, 읽음 완료를 의미하지 않습니다.
 
-`clientMessageId`는 ACK/NACK correlation과 클라이언트 재시도 멱등성에 사용합니다. DB는 `(senderId, clientMessageId)` unique constraint로 같은 발신자의 같은 클라이언트 메시지가 중복 저장되지 않게 막습니다. `messageKey`는 Kafka event/message identity이며 DLT replay와 Kafka-level duplication에 대한 멱등성 기준으로 유지합니다.
+`clientMessageId`는 ACK/NACK correlation과 클라이언트 재시도 멱등성에 사용합니다.
+DB는 `(senderId, clientMessageId)` unique constraint로 같은 발신자의 같은 클라이언트 메시지가 중복 저장되지 않게 막습니다.
+`messageKey`는 Kafka event/message identity이며 DLT replay와 Kafka-level duplication에 대한 멱등성 기준으로 유지합니다.
 
 ---
 
@@ -271,7 +275,8 @@ consumer failure
   -> consumer 재처리
 ```
 
-Replay 중복 저장은 `messageKey` unique constraint와 consumer의 `existsByMessageKey` 체크로 방지합니다. 클라이언트 재시도 중복 저장은 별도로 `(senderId, clientMessageId)` unique constraint로 방지합니다.
+Replay 중복 저장은 `messageKey` unique constraint와 consumer의 `existsByMessageKey` 체크로 방지합니다.
+클라이언트 재시도 중복 저장은 별도로 `(senderId, clientMessageId)` unique constraint로 방지합니다.
 
 > 이 기능은 자동 복구 시스템이 아닙니다. 운영 환경에서는 replay 권한 제어, 감사 로그, replay 대상 필터링, 재처리 결과 추적이 추가로 필요합니다.
 
@@ -700,7 +705,7 @@ k6 run \
 |---|---|
 | ACK/NACK | ACCEPTED는 Kafka publish 단계의 결과만 의미합니다. PERSISTED는 DB 저장 완료 또는 기존 idempotent row 확인만 의미합니다. WebSocket broadcast 완료, 상대방 수신 완료, 읽음 완료를 보장하지 않습니다. |
 | `clientMessageId` | ACK/NACK correlation과 클라이언트 재시도 멱등성 용도입니다. `(senderId, clientMessageId)` unique constraint가 같은 발신자의 같은 클라이언트 메시지 중복 저장을 막습니다. |
-| Rate limit | Redis fixed-window 기반 user-level SEND 제한입니다. 초 경계 burst는 token bucket/sliding window보다 덜 엄밀합니다. 자세한 한계는 [`docs/REDIS_LIMITATIONS.md`](docs/REDIS_LIMITATIONS.md)에 정리했습니다. |
+| Rate limit | Redis fixed-window 기반 user-level SEND 제한입니다. 초 경계 burst 한계는 [`docs/REDIS_LIMITATIONS.md`](docs/REDIS_LIMITATIONS.md)에 정리했습니다. |
 | Kafka ordering | 같은 `roomId`가 같은 partition에 들어가는 범위에 한정됩니다. 서로 다른 room 간 전역 순서는 보장하지 않습니다. |
 | DLT replay | 내부 manual utility입니다. 운영 환경에서는 접근 제어, 감사 로그, replay 대상 필터링, 결과 추적이 필요합니다. |
 | Redis Pub/Sub fan-out | Pub/Sub는 best-effort입니다. 재연결한 클라이언트는 `lastReceivedMessageId`로 sync API를 호출해 누락 가능성을 보정해야 합니다. |
