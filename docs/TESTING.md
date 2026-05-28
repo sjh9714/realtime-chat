@@ -1,7 +1,7 @@
 # Testing Evidence
 
 이 문서는 Realtime Chat의 포트폴리오 claim을 어떤 테스트와 스크립트가 지지하는지 분리합니다. smoke
-수치와 공개 benchmark 수치를 구분하고, 운영 성능처럼 보이는 claim은 추가하지 않습니다.
+수치와 공개 benchmark 수치를 구분하고, claim boundary: 운영 성능처럼 보이는 claim은 추가하지 않습니다.
 
 ## 검증된 범위
 

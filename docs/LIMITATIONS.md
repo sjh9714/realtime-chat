@@ -12,7 +12,7 @@ artifact가 보존된 뒤에만 추가합니다.
 | room-global ordering | 1,000-user receiver matrix와 10-room mixed HTTP probe에서 persisted message id 기준 local diagnostic 기록 | Kafka offset 기반 room-global sequence와 운영 환경 반복 측정 |
 | mixed traffic p95 | 10-room/50-user local mixed HTTP probe repeat3는 시나리오 검증으로 기록, production/cache hit benchmark는 추가 측정 예정 | 읽기/쓰기/receipt/cache hit ratio를 분리해 기록 |
 | Redis rate-limit smoothing | fixed-window 구현 | sliding window/token bucket과 burst 비교 |
-| production 운영성 | runbook 초안과 테스트 중심 | replay audit, dashboard, alert, SLO 검증 |
+| production 운영성 | runbook 초안과 테스트 중심. Claim boundary: production/SLO 운영성을 주장하지 않음 | replay audit, dashboard, alert, SLO 검증은 별도 측정 예정 |
 
 ## 면접에서 안전하게 말할 문장
 

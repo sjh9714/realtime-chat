@@ -8,7 +8,7 @@
 - 상태: 시나리오 검증
 - 범위: 2-user, 1-room, 1-message local receiver matrix artifact
 - 목적: `manifest.json`, raw JSONL, regenerated `summary.json`, `byRoom` coverage를 validator가 실제로 대조할 수 있는지 확인
-- 제외: 500/1,000 session benchmark, mixed traffic p95, room-global ordering, 운영 성능 claim
+- 제외: 500/1,000 session benchmark, mixed traffic p95, room-global ordering, 운영 성능 claim. Claim boundary: local validator evidence only.
 
 ## Command
 

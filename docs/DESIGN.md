@@ -182,7 +182,7 @@ ACCEPTED ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻이다. 
 
 `clientMessageId`는 ACK/NACK correlation과 클라이언트 재시도 멱등성 용도다. Kafka event의 `messageKey`는 event/message identity이며 DLT replay와 Kafka-level duplication 멱등성 기준으로 유지한다. DB 저장 시에는 `messages(sender_id, client_message_id)` unique constraint가 같은 발신자의 같은 클라이언트 메시지 중복 저장을 막는다.
 
-## Kafka 토픽과 순서 보장
+## Kafka 토픽과 순서 검증 경계
 
 | Topic | Key | 목적 |
 | --- | --- | --- |
@@ -191,11 +191,11 @@ ACCEPTED ACK는 Kafka broker가 publish 요청을 accepted 했다는 뜻이다. 
 | `chat.messages.dlt` | 원 record key 또는 `roomId` | 실패 채팅 메시지 격리 |
 | `chat.read-receipts.dlt` | 원 record key 또는 `roomId` | 실패 read receipt 격리 |
 
-순서 보장 범위는 다음으로 제한한다.
+순서 검증 범위는 다음으로 제한한다. Claim boundary: 동일 room partition 범위로만 해석한다.
 
 - producer는 `roomId`를 Kafka key로 사용한다.
 - 같은 `roomId`의 메시지는 같은 partition에 들어간다.
-- Kafka는 같은 partition 안에서 offset 순서를 보장한다.
+- Kafka는 같은 partition 안에서 offset 순서를 제공하며, 이 프로젝트는 동일 room partition 범위로만 검증한다.
 - consumer는 저장 시 `kafkaPartition`, `kafkaOffset`을 함께 기록한다.
 - 서로 다른 room 간 전역 순서는 보장하지 않는다.
 
@@ -301,4 +301,4 @@ GET /api/rooms/{roomId}/messages/sync?afterMessageId={lastReceivedMessageId}&lim
 - `chat.messages.dlt` replay만 manual utility로 제공한다. `chat.read-receipts.dlt` replay 자동화는 별도 과제다.
 - Presence heartbeat는 클라이언트 협조가 필요하다.
 - DLT replay는 내부 service utility이며 운영용 API, 권한 제어, 감사 로그는 아직 없다.
-- k6 mixed scenario는 local smoke로 주요 경로 실행을 확인했고, receiver 기준 10-room/50-user mixed HTTP probe repeat3는 local 시나리오 검증으로 기록했다. production benchmark와 cache hit ratio는 별도 실행 후 기록해야 한다.
+- k6 mixed scenario는 local smoke로 주요 경로 실행을 확인했고, receiver 기준 10-room/50-user mixed HTTP probe repeat3는 local 시나리오 검증으로 기록했다. Claim boundary: production benchmark와 cache hit ratio는 별도 실행 후 기록해야 한다.

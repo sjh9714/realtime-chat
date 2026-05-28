@@ -487,7 +487,7 @@ artifact를 `docs/PERF_RESULT.md` 또는 portfolio claim으로 옮기기 전에 
 - 각 expected room id가 `summary.byRoom`에 존재한다.
 - mixed HTTP probe를 포함한 실행은 `mixedHttp.failedRequests === 0`이다.
 - `statusless`, `failed`, `missing`, `duplicate`, `unexpected`가 있으면 성능 성공 claim이 아니라 진단 결과로만 쓴다.
-- production/mixed benchmark는 해당 규모의 raw artifact, manifest, validator 통과 기록이 있을 때만
+- claim boundary: production/mixed benchmark는 해당 규모의 raw artifact, manifest, validator 통과 기록이 있을 때만
   `측정 완료`로 승격한다. 현재 local receiver matrix는 `시나리오 검증`으로 유지한다.
 
 ## 8. 결과 기록 템플릿

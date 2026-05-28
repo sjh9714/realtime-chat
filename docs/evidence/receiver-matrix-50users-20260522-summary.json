@@ -25,5 +25,5 @@
     "max": 239
   },
   "senderLocalOutOfOrderCount": 3,
-  "claimBoundary": "Single local receiver-matrix run. Not a repeated benchmark, production performance claim, or room-global ordering claim."
+  "claimBoundary": "Single local receiver-matrix run. Claim boundary: not a repeated benchmark, production performance claim, or room-global ordering claim."
 }

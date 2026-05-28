@@ -143,7 +143,7 @@ A → Kafka(우체국)에 맡김 → consumer가 room 이벤트를 처리
 Producer   : 메시지를 보내는 쪽 (우편 발송인)
 Consumer   : 메시지를 받는 쪽 (수신인)
 Topic      : 메시지 분류함 (chat.messages, chat.read-receipts)
-Partition  : 토픽을 나눈 칸 (순서 보장의 핵심!)
+Partition  : 토픽을 나눈 칸 (순서 검증의 핵심, claim boundary: 같은 partition 범위)
 Offset     : 각 메시지의 순번 (몇 번째 메시지까지 읽었는지 추적)
 Consumer Group : 같은 메시지를 다른 용도로 처리하는 그룹
 ```
@@ -154,11 +154,11 @@ chat.messages 토픽 (6개 파티션)
 ┌──────────┐ ┌──────────┐ ┌──────────┐
 │Partition 0│ │Partition 1│ │Partition 2│  ...
 │ 방1 메시지 │ │ 방2 메시지 │ │ 방3 메시지 │
-│  순서보장  │ │  순서보장  │ │  순서보장  │
+│순서 검증 범위│ │순서 검증 범위│ │순서 검증 범위│
 └──────────┘ └──────────┘ └──────────┘
 
 partition key = roomId → 같은 방의 메시지는 항상 같은 파티션
-→ 파티션 안에서는 순서가 보장됨!
+→ 파티션 안에서는 offset 순서로 검증함. claim boundary: 전역 순서를 주장하지 않음.
 ```
 
 **Consumer Group이 왜 필요한가?**
@@ -407,7 +407,7 @@ services:
     image: redis:7-alpine
     ports: ["6379:6379"]
 
-  kafka:          # 메시지 큐. 순서 보장, Consumer Group
+  kafka:          # 메시지 큐. 같은 partition 순서 검증, Consumer Group
     image: apache/kafka:3.9.0
     ports: ["29092:29092"]   # 로컬에서 접속하는 포트
     # KRaft 모드: Zookeeper 없이 Kafka 단독 실행
@@ -461,7 +461,7 @@ none:          아무것도 안 함
 -- messages 테이블의 핵심 컬럼들
 CREATE TABLE IF NOT EXISTS messages (
     id              BIGSERIAL PRIMARY KEY,     -- 자동 증가 PK
-    message_key     UUID NOT NULL UNIQUE,       -- 멱등성 보장용 (같은 메시지 중복 저장 방지)
+    message_key     UUID NOT NULL UNIQUE,       -- 멱등성 검증용 (같은 메시지 중복 저장 방지)
     room_id         BIGINT NOT NULL,            -- 어느 방의 메시지인지
     sender_id       BIGINT NOT NULL,            -- 누가 보냈는지
     content         TEXT NOT NULL,              -- 메시지 내용
