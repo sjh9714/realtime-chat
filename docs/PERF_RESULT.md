@@ -1,5 +1,10 @@
 # 채팅방 조회 API 성능 최적화 기록
 
+> [!WARNING]
+> Historical unpinned archive입니다. 이 결과는 현재 room-list와 persistence pipeline의 commit-pinned
+> 측정이 아니므로 현재 코드의 성능 evidence로 사용하지 않습니다. 공개 성능 수치는 현재 commit에서
+> 환경·명령·raw artifact를 고정해 재측정한 뒤에만 갱신합니다.
+
 > 이 문서는 실시간 채팅 서비스의 성능 문제를 **발견 → 분석 → 해결 → 검증**하는 과정을 기록한다.
 > 단순히 "N+1을 해결했다"가 아니라, 어떤 문제가 있었고 왜 이 방식으로 해결했는지를 설명한다.
 >

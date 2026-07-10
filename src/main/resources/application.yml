@@ -10,8 +10,8 @@ spring:
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/chat
-    username: chat
-    password: chat1234
+    username: ${DB_USERNAME:chat}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -52,11 +52,15 @@ spring:
         isolation.level: read_committed
 
 chat:
+  allowed-origins: ${CHAT_ALLOWED_ORIGINS:http://localhost:5173}
+  kafka:
+    retry-backoff-ms: ${CHAT_KAFKA_RETRY_BACKOFF_MS:1000}
+    retry-attempts: ${CHAT_KAFKA_RETRY_ATTEMPTS:3}
   rate-limit:
     messages-per-second: 10
 
 jwt:
-  secret: realtime-chat-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256
+  secret: ${JWT_SECRET}
   expiration: 86400000  # 24시간
 
 management:

@@ -7,10 +7,10 @@ artifact가 보존된 뒤에만 추가합니다.
 
 | 항목 | 현재 상태 | 다음 보강 |
 | --- | --- | --- |
-| send-to-receive latency | 50/500/1,000-user receiver matrix와 10-room mixed HTTP probe local repeat3는 시나리오 검증, production benchmark는 아님 | receiver clock, clientMessageId join, 실행 환경을 고정한 production benchmark 실행 |
-| delivery completeness | 50/500/1,000-user receiver matrix와 10-room mixed HTTP probe local repeat3는 시나리오 검증, public delivery benchmark는 아님 | production에 가까운 환경과 장시간 반복 측정 |
-| room-global ordering | 1,000-user receiver matrix와 10-room mixed HTTP probe에서 persisted message id 기준 local diagnostic 기록 | Kafka offset 기반 room-global sequence와 운영 환경 반복 측정 |
-| mixed traffic p95 | 10-room/50-user local mixed HTTP probe repeat3는 시나리오 검증으로 기록, production/cache hit benchmark는 추가 측정 예정 | 읽기/쓰기/receipt/cache hit ratio를 분리해 기록 |
+| send-to-receive latency | 이전 local 결과는 historical unpinned archive이며 현재 코드 evidence가 아님 | 현재 commit에서 receiver clock, clientMessageId join, 환경·명령·raw artifact를 고정해 재측정 |
+| delivery completeness | 이전 receiver matrix는 historical unpinned archive이며 현재 코드의 public delivery 결과가 아님 | 현재 commit과 production에 가까운 환경에서 장시간 반복 측정 |
+| room-global ordering | 구현 계약은 동일 room partition 범위이며 이전 local diagnostic은 현재 코드 evidence가 아님 | Kafka offset 기반 room sequence를 현재 commit에서 반복 검증 |
+| mixed traffic p95 | 현재 room-list와 persistence pipeline 기준 공개 수치 없음 | 읽기/쓰기/receipt/cache hit ratio를 분리해 현재 commit에서 기록 |
 | Redis rate-limit smoothing | fixed-window 구현 | sliding window/token bucket과 burst 비교 |
 | production 운영성 | runbook 초안과 테스트 중심. Claim boundary: production/SLO 운영성을 주장하지 않음 | replay audit, dashboard, alert, SLO 검증은 별도 측정 예정 |
 

@@ -83,6 +83,20 @@ class ChatRoomIntegrationTest extends BaseIntegrationTest {
 
     assertThat(listResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(listResponse.getBody()).hasSize(2);
+    assertThat(listResponse.getBody())
+        .filteredOn(room -> room.getType() == com.realtime.chat.domain.RoomType.DIRECT)
+        .singleElement()
+        .satisfies(
+            room -> {
+              assertThat(room.getDisplayName()).isEqualTo("유저2");
+              assertThat(room.getLastMessageId()).isNull();
+            });
+
+    // Redis cache hit에서도 concrete list type을 역직렬화할 수 있어야 한다.
+    ResponseEntity<List<ChatRoomListResponse>> cachedListResponse =
+        getListWithAuth("/api/rooms", new ParameterizedTypeReference<>() {}, token1);
+    assertThat(cachedListResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(cachedListResponse.getBody()).hasSize(2);
 
     // 5. 채팅방 상세 조회
     ResponseEntity<ChatRoomResponse> detailResponse =

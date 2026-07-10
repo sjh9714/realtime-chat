@@ -17,7 +17,7 @@ class DocumentationGuardTest {
       Path.of("docs", "assets", "architecture");
 
   @Test
-  @DisplayName("README는 전체 아키텍처 섹션과 evidence pending 문구를 유지한다")
+  @DisplayName("README는 전체 아키텍처와 현재 코드 evidence 경계를 유지한다")
   void readmeKeepsArchitectureAndEvidenceBoundaries() throws IOException {
     String readme = Files.readString(README);
 
@@ -30,10 +30,16 @@ class DocumentationGuardTest {
         .contains(
             "이 다이어그램은 구현된 핵심 흐름과 검증 대상 경계를 설명하기 위한 단순화된 구조도이며, 운영 배포 토폴로지나 production SLO를 주장하지 않습니다.");
 
-    assertThat(readme).contains("1,000 session send-to-receive latency | benchmark 미측정");
-    assertThat(readme).contains("1,000 session delivery completeness | benchmark 미측정");
-    assertThat(readme).contains("mixed traffic p95 latency | benchmark 미측정");
-    assertThat(readme).contains("mixed traffic cache hit rate는 추가 측정 예정");
+    assertThat(readme)
+        .contains("현재 성능 주장: 없음")
+        .contains("historical unpinned archive")
+        .contains("docker-compose.demo.yml -f docker-compose.e2e.yml")
+        .contains("`x-app-instance`")
+        .doesNotContain(
+            "937 -> 1,598",
+            "212.85ms -> 149.22ms",
+            "expected 99,900",
+            "1,000-user receiver matrix repeat3에서");
   }
 
   @Test

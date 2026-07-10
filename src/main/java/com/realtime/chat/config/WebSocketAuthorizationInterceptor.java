@@ -2,6 +2,7 @@ package com.realtime.chat.config;
 
 import com.realtime.chat.repository.ChatRoomMemberRepository;
 import java.security.Principal;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +22,12 @@ import org.springframework.stereotype.Component;
 public class WebSocketAuthorizationInterceptor implements ChannelInterceptor {
 
   private static final Pattern ROOM_TOPIC_PATTERN = Pattern.compile("^/topic/room\\.(\\d+)$");
+  private static final Pattern ROOM_PRESENCE_TOPIC_PATTERN =
+      Pattern.compile("^/topic/room\\.(\\d+)\\.presence$");
   private static final String ROOM_TOPIC_PREFIX = "/topic/room.";
+  private static final String LEGACY_PRESENCE_TOPIC = "/topic/presence";
+  private static final Set<String> ALLOWED_SEND_DESTINATIONS =
+      Set.of("/app/chat.send", "/app/presence.heartbeat");
 
   private final ChatRoomMemberRepository chatRoomMemberRepository;
 
@@ -29,11 +35,22 @@ public class WebSocketAuthorizationInterceptor implements ChannelInterceptor {
   public Message<?> preSend(Message<?> message, MessageChannel channel) {
     StompHeaderAccessor accessor =
         MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
-    if (accessor == null || !StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
+    if (accessor == null) {
+      return message;
+    }
+
+    if (StompCommand.SEND.equals(accessor.getCommand())) {
+      authorizeSend(accessor);
+      return message;
+    }
+    if (!StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
       return message;
     }
 
     String destination = accessor.getDestination();
+    if (LEGACY_PRESENCE_TOPIC.equals(destination)) {
+      throw new AccessDeniedException("전체 사용자 presence 구독은 허용되지 않습니다.");
+    }
     Long roomId = extractRoomId(destination);
     if (roomId == null) {
       if (isRoomTopicCandidate(destination)) {
@@ -56,13 +73,27 @@ public class WebSocketAuthorizationInterceptor implements ChannelInterceptor {
     return message;
   }
 
+  private void authorizeSend(StompHeaderAccessor accessor) {
+    String destination = accessor.getDestination();
+    if (!ALLOWED_SEND_DESTINATIONS.contains(destination)) {
+      log.warn("허용되지 않은 STOMP SEND destination: {}", destination);
+      throw new AccessDeniedException("허용되지 않은 메시지 전송 경로입니다.");
+    }
+    if (accessor.getUser() == null) {
+      throw new AccessDeniedException("인증된 사용자만 메시지를 전송할 수 있습니다.");
+    }
+  }
+
   private Long extractRoomId(String destination) {
     if (destination == null) {
       return null;
     }
     Matcher matcher = ROOM_TOPIC_PATTERN.matcher(destination);
     if (!matcher.matches()) {
-      return null;
+      matcher = ROOM_PRESENCE_TOPIC_PATTERN.matcher(destination);
+      if (!matcher.matches()) {
+        return null;
+      }
     }
     try {
       return Long.parseLong(matcher.group(1));

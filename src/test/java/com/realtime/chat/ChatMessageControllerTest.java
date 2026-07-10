@@ -96,7 +96,8 @@ class ChatMessageControllerTest {
     assertThat(response.getClientMessageId()).isEqualTo(clientMessageId);
     assertThat(response.getRoomId()).isEqualTo(20L);
     assertThat(response.getStatus()).isEqualTo(MessagePublishStatus.FAILED);
-    assertThat(response.getReason()).contains("kafka unavailable");
+    assertThat(response.getCode()).isEqualTo("MESSAGE_PUBLISH_FAILED");
+    assertThat(response.getReason()).contains("잠시 후 다시 시도");
     verify(messagesSentCounter, never()).increment();
   }
 

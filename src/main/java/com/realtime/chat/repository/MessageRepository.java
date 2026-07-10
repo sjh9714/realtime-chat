@@ -2,6 +2,7 @@ package com.realtime.chat.repository;
 
 import com.realtime.chat.domain.Message;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,6 +29,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
   // 클라이언트 재시도 멱등성 처리: sender/clientMessageId로 기존 메시지 조회
   Optional<Message> findBySenderIdAndClientMessageId(Long senderId, UUID clientMessageId);
+
+  long countByClientMessageId(UUID clientMessageId);
 
   // 읽음 처리 검증: 해당 room의 메시지인지 확인
   @Query(
@@ -73,6 +76,18 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
       @Param("roomId") Long roomId,
       @Param("afterMessageId") Long afterMessageId,
       @Param("limit") int limit);
+
+  @Query(
+      """
+      SELECT m FROM Message m
+      JOIN FETCH m.sender
+      WHERE m.chatRoom.id IN :roomIds
+      AND NOT EXISTS (
+          SELECT newer.id FROM Message newer
+          WHERE newer.chatRoom.id = m.chatRoom.id AND newer.id > m.id
+      )
+      """)
+  List<Message> findLatestByRoomIds(@Param("roomIds") Collection<Long> roomIds);
 
   @Query(
       """

@@ -42,20 +42,22 @@
 ```
 [사용자 A] --- WebSocket으로 메시지 전송 --→ [Spring Boot 서버]
                                                   │
-                                           Kafka에 메시지 저장
+                                           Kafka chat.messages
+                                                  │
+                                  [MessagePersistenceConsumer]
+                                                  │
+                              DB 저장 + unread 갱신 transaction commit
+                                                  │
+                              persisted MessageResponse를 Redis에 발행
+                              sender PERSISTED 알림 → Kafka ACK
                                                   │
                                          ┌────────┴────────┐
-                                         ▼                  ▼
-                                   [Consumer 1]       [Consumer 2]
-                                   DB에 저장           Redis로 발행
-                                                        │
-                                                  ┌─────┴─────┐
-                                                  ▼           ▼
-                                             [서버 1]     [서버 2]
-                                                  │           │
-                                             WebSocket    WebSocket
-                                                  │           │
-                                             [사용자 B]   [사용자 C]
+                                         ▼                 ▼
+                                    [서버 1]          [서버 2]
+                                         │                 │
+                                    WebSocket         WebSocket
+                                         │                 │
+                                    [사용자 B]        [사용자 C]
 ```
 
 ### 왜 이렇게 복잡하게?
@@ -161,13 +163,14 @@ partition key = roomId → 같은 방의 메시지는 항상 같은 파티션
 → 파티션 안에서는 offset 순서로 검증함. claim boundary: 전역 순서를 주장하지 않음.
 ```
 
-**Consumer Group이 왜 필요한가?**
+**하나의 persistence Consumer Group이 무엇을 보장하는가?**
 ```
-같은 메시지를 2가지 용도로 써야 함:
-1. DB에 저장 (Consumer Group 1: chat-persistence)
-2. 실시간 전달 (Consumer Group 2: chat-broadcast)
+chat-persistence group이 room partition record를 한 번에 하나씩 처리:
+1. PostgreSQL 저장과 unread 갱신을 commit
+2. commit된 DB identity로 Redis room fan-out
+3. 발신자 PERSISTED 알림 뒤 Kafka ack
 
-Consumer Group이 다르면 같은 메시지를 각각 받을 수 있음!
+따라서 저장되지 않은 이벤트가 먼저 보이는 순서 역전을 막습니다.
 ```
 
 ### WebSocket / STOMP
@@ -324,14 +327,14 @@ src/main/java/com/realtime/chat/
 │   └── ChatMessageProducer.java
 │
 ├── consumer/                   ← Kafka에서 메시지를 받아 처리하는 역할
-│   ├── MessagePersistenceConsumer.java  ← DB 저장 담당
-│   ├── MessageBroadcastConsumer.java    ← 실시간 전달 담당
+│   ├── MessagePersistenceConsumer.java  ← commit 후 persisted fan-out 담당
 │   └── ReadReceiptConsumer.java         ← 읽음 처리 담당
 │
 ├── service/                    ← 비즈니스 로직
 │   ├── AuthService.java        ← 회원가입, 로그인
 │   ├── ChatRoomService.java    ← 채팅방 생성, 조회
 │   ├── MessageService.java     ← 메시지 이력 조회
+│   ├── MessagePersistenceService.java ← DB transaction과 멱등성 경계
 │   ├── ReadReceiptService.java ← 읽음 처리
 │   └── RedisPubSubService.java ← Redis 발행/구독 → WebSocket 전달
 │
@@ -1086,8 +1089,11 @@ public class ChatMessageController {
 문제: DB 저장과 전달 순서가 뒤바뀔 수 있음, 서버 2대면 복잡해짐
 
 [Kafka 경유 방식]
-클라이언트A → 서버 → Kafka → Consumer1(DB 저장) + Consumer2(브로드캐스트)
-장점: 같은 roomId 메시지를 같은 partition으로 보내 순서 해석 범위를 좁힘
+클라이언트A → 서버 → Kafka → MessagePersistenceConsumer
+→ MessagePersistenceService.persist()가 DB transaction commit
+→ commit된 MessageResponse만 Redis room fan-out과 sender PERSISTED 알림에 사용
+→ 두 Redis 발행이 끝난 뒤 Kafka ACK
+장점: 저장되지 않은 메시지가 먼저 보이는 순서 역전을 막고, 같은 roomId의 partition 순서 범위를 유지
 단점: Kafka 경유와 fan-out 단계가 추가되므로 send-to-receive latency는 아직 추가 측정 예정
 ```
 
@@ -1097,18 +1103,17 @@ public class ChatMessageController {
 @Service
 public class RedisPubSubService {
 
-    // Kafka Consumer → Redis 채널에 발행
-    public void publish(ChatMessageEvent event) {
-        String channel = "chat:room:" + event.getRoomId();  // 예: "chat:room:1"
-        String message = objectMapper.writeValueAsString(event);
+    // MessagePersistenceConsumer가 DB commit 뒤 전달한 persisted 응답만 발행
+    public void publishPersistedMessage(MessageResponse messageResponse) {
+        String channel = RedisConfig.CHAT_ROOM_CHANNEL_PREFIX + messageResponse.getRoomId();
+        String message = objectMapper.writeValueAsString(messageResponse);
         redisTemplate.convertAndSend(channel, message);
     }
 
     // Redis 구독 → WebSocket으로 클라이언트에게 전달
     public void onMessage(String message, String channel) {
-        ChatMessageEvent event = objectMapper.readValue(message, ChatMessageEvent.class);
-        String roomId = channel.replace("chat:room:", "");
-        String destination = "/topic/room." + roomId;  // STOMP 구독 경로
+        MessageResponse event = objectMapper.readValue(message, MessageResponse.class);
+        String destination = "/topic/room." + event.getRoomId();
 
         messagingTemplate.convertAndSend(destination, event);
         // ↑ 이 서버에서 /topic/room.1을 구독 중인 모든 WebSocket 클라이언트에게 전달!
@@ -1127,38 +1132,39 @@ public class RedisPubSubService {
    │    │   구독 ← 서버2         │      │
    │    └──────────────────────┘      │
    │                                   │
-Consumer가 Redis에 publish             │
+MessagePersistenceConsumer가 commit된 MessageResponse를 publish
 → 서버1: onMessage() → 사용자A에게 전달  │
 → 서버2: onMessage() → 사용자B에게 전달 ←┘
 ```
 
-### MessageBroadcastConsumer.java — Kafka → Redis 연결
+### Commit 이후 persisted pipeline — PostgreSQL → Redis 연결
 
 ```java
-// Consumer Group 2: Kafka에서 받은 메시지를 Redis Pub/Sub로 발행
-@Component
-public class MessageBroadcastConsumer {
+// MessagePersistenceConsumer
+PersistedMessageResult result =
+        messagePersistenceService.persist(event, record.partition(), record.offset());
+// 위 transactional service가 반환될 때 PostgreSQL commit 완료
 
-    @KafkaListener(topics = MESSAGES_TOPIC, containerFactory = "broadcastListenerFactory")
-    public void consume(ConsumerRecord<String, ChatMessageEvent> record, Acknowledgment ack) {
-        ChatMessageEvent event = record.value();
-        redisPubSubService.publish(event);  // Redis Pub/Sub로 전달
-        ack.acknowledge();
-    }
+if (result.shouldBroadcast()) {
+    redisPubSubService.publishPersistedMessage(result.message());
 }
+redisPubSubService.publishPersisted(
+        MessagePersistedNotification.from(result.message(), event.getSenderId()));
+ack.acknowledge();
 ```
 
-**Consumer 2개가 같은 토픽을 읽는 이유:**
+**왜 저장과 broadcast 순서를 하나로 묶었나:**
 ```
 chat.messages 토픽
     │
-    ├── Consumer Group 1 (chat-persistence): 메시지를 DB에 저장
-    │   → 영구 보관 목적
-    │
-    └── Consumer Group 2 (chat-broadcast): 메시지를 실시간 전달
-        → 현재 접속 중인 사용자에게 즉시 전달
+    └── chat-persistence consumer
+        1. DB transaction commit
+        2. DB id/clientMessageId를 가진 room payload를 Redis publish
+        3. 발신자 PERSISTED 알림 publish
+        4. Kafka ack
 
-서로 다른 Consumer Group이므로 같은 메시지를 각각 받음!
+DB가 실패하면 broadcast가 먼저 나가지 않습니다.
+Redis publish가 실패하면 Kafka가 같은 record를 재전달하고 기존 DB row를 멱등 재사용합니다.
 ```
 
 ---
@@ -1451,17 +1457,15 @@ messageRepository.save(message);  // INSERT INTO messages ...
 // UPDATE chat_room_members SET unread_count = unread_count + 1
 // WHERE room_id = 1 AND user_id != A
 
-ack.acknowledge();  // Kafka에 "처리 완료" 알림
+// transaction commit 뒤에만 consumer로 결과가 반환됨
 ```
 
-### 4단계-B: MessageBroadcastConsumer (실시간 전달)
+### 4단계-B: persisted payload 발행과 Kafka ack
 
 ```java
-// Consumer Group "chat-broadcast" (독립적으로 같은 메시지 수신)
-
-redisPubSubService.publish(event);
-// → Redis: PUBLISH "chat:room:1" "{\"messageKey\":\"550e8400...\", ...}"
-
+redisPubSubService.publishPersistedMessage(result.message());
+// → DB id/clientMessageId/status=PERSISTED가 포함된 payload
+redisPubSubService.publishPersisted(senderNotification);
 ack.acknowledge();
 ```
 
@@ -1475,8 +1479,8 @@ public void onMessage(String message, String channel) {
     // channel = "chat:room:1"
     // message = JSON 문자열
 
-    ChatMessageEvent event = objectMapper.readValue(message, ...);
-    messagingTemplate.convertAndSend("/topic/room.1", event);
+    MessageResponse persisted = objectMapper.readValue(message, ...);
+    messagingTemplate.convertAndSend("/topic/room.1", persisted);
     // ↑ 이 서버에서 /topic/room.1을 구독 중인 모든 WebSocket 클라이언트에게 전달
 }
 ```
@@ -1510,23 +1514,24 @@ content-type: application/json
                                   │
                             [Kafka: chat.messages, Partition 3]
                                   │
-                    ┌─────────────┴─────────────┐
-                    ▼                             ▼
-          PersistenceConsumer              BroadcastConsumer
-          (chat-persistence)               (chat-broadcast)
-                    │                             │
-              DB INSERT                    Redis PUBLISH
-              + unreadCount++              "chat:room:1"
-                                                  │
-                                    ┌─────────────┴─────────────┐
-                                    ▼                             ▼
-                              [서버 1]                       [서버 2]
-                           onMessage()                    onMessage()
-                                    │                             │
-                         STOMP SEND                    STOMP SEND
-                         /topic/room.1                 /topic/room.1
-                                    │                             │
-                              클라이언트B                    클라이언트C
+                    ▼
+          PersistenceConsumer (chat-persistence)
+                    │
+              DB INSERT + unreadCount++
+              transaction commit
+                    │
+              Redis PUBLISH persisted payload
+              Kafka ack
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+      [서버 1]             [서버 2]
+     onMessage()          onMessage()
+          │                   │
+      STOMP SEND          STOMP SEND
+      /topic/room.1       /topic/room.1
+          │                   │
+      클라이언트B          클라이언트C
 ```
 
 ---
@@ -1605,17 +1610,15 @@ userRepository.findByEmail("test@test.com")
 // → 없으면 명확한 에러 메시지
 ```
 
-### Q: 왜 Kafka Consumer가 2개 그룹인가?
+### Q: 왜 DB commit 뒤에 Redis broadcast를 하는가?
 
 ```
-만약 1개 Consumer로 "DB 저장 + 브로드캐스트"를 동시에 하면?
-→ DB 저장이 느려지면 브로드캐스트도 느려짐
-→ 브로드캐스트 에러가 나면 DB 저장도 실패할 수 있음
+fan-out이 DB보다 먼저 실행되면 아직 저장되지 않은 메시지가 사용자에게 보일 수 있습니다.
+현재 pipeline은 DB commit → Redis room payload → sender PERSISTED → Kafka ack 순서를 고정합니다.
 
-Consumer Group을 분리하면:
-→ DB 저장이 느려도 브로드캐스트는 독립적으로 동작
-→ 각각의 처리 속도, 에러 핸들링, 스케일링이 독립적
-→ 책임 분리 원칙 (Single Responsibility)
+Redis가 실패해도 이미 commit된 row는 유지됩니다.
+Kafka redelivery는 같은 messageKey row를 찾아 다시 publish하고,
+새 messageKey로 들어온 같은 clientMessageId retry는 receiver에게 중복 broadcast하지 않습니다.
 ```
 
 ### Q: Redis Pub/Sub는 메시지를 저장하나?
@@ -1990,12 +1993,18 @@ SessionConnectEvent 발생
             │
             ▼
     [모든 서버 인스턴스]
-    RedisPubSubService.onPresenceMessage()    → STOMP "/topic/presence"로 브로드캐스트
+    RedisPubSubService.onPresenceMessage()
+            → event user가 속한 roomId 목록 조회
+            → STOMP "/topic/room.{roomId}.presence"로 room별 fan-out
             │
             ▼
-    [구독 중인 모든 클라이언트]
+    [해당 room topic을 구독한 멤버 클라이언트]
     { "userId": 1, "status": "ONLINE", "timestamp": 1707350400000 }
 ```
+
+`chat:presence`는 app instance 사이에서 상태 변경을 전달하는 내부 Redis 채널입니다. 클라이언트가 이
+전역 채널을 직접 구독하지는 않습니다. 서버는 이벤트를 받으면 해당 사용자가 속한 room을 조회해
+room별 presence topic으로 나누고, 클라이언트는 현재 선택한 방의 인가된 topic만 구독합니다.
 
 ### PresenceEvent.java — 상태 이벤트 DTO
 
@@ -2199,11 +2208,14 @@ public void publishPresence(PresenceEvent event) {
     //                           "chat:presence"
 }
 
-// Redis에서 Presence 이벤트 수신 → STOMP로 전체 브로드캐스트
+// Redis에서 Presence 이벤트 수신 → event user가 속한 room별 STOMP topic으로 fan-out
 public void onPresenceMessage(String message, String channel) {
     PresenceEvent event = objectMapper.readValue(message, PresenceEvent.class);
-    messagingTemplate.convertAndSend("/topic/presence", event);
-    // 이 서버에서 /topic/presence를 구독 중인 모든 클라이언트에게 전달
+    chatRoomMemberRepository.findRoomIdsByUserId(event.getUserId())
+        .forEach(roomId -> messagingTemplate.convertAndSend(
+            "/topic/room." + roomId + ".presence",
+            event));
+    // 각 room topic SUBSCRIBE는 WebSocketAuthorizationInterceptor가 membership을 확인
 }
 ```
 
@@ -2224,14 +2236,16 @@ SessionConnectEvent → WebSocketEventListener
     → 구독 중인 서버 1, 서버 2 모두에게 전달
 
 [서버 1] onPresenceMessage()
-    → messagingTemplate.convertAndSend("/topic/presence", event)
-    → 서버1에 연결된 클라이언트들에게 전달
+    → 사용자A가 속한 roomId 목록 조회
+    → 각 "/topic/room.{roomId}.presence"에 전달
+    → 서버1에서 해당 room topic을 구독한 멤버가 수신
 
 [서버 2] onPresenceMessage()
-    → messagingTemplate.convertAndSend("/topic/presence", event)
-    → 서버2에 연결된 클라이언트들에게 전달
+    → 사용자A가 속한 roomId 목록 조회
+    → 각 "/topic/room.{roomId}.presence"에 전달
+    → 서버2에서 해당 room topic을 구독한 멤버가 수신
 
-결과: 어느 서버에 연결되어 있든 모든 클라이언트가 "사용자A 접속" 알림 수신!
+결과: 어느 서버에 연결되어 있든 사용자A와 같은 room을 선택해 구독한 멤버만 상태 변경을 수신합니다.
 ```
 
 ### PresenceController.java — REST API
@@ -2251,10 +2265,11 @@ public class PresenceController {
 
 ```
 클라이언트가 채팅방에 입장할 때:
-1. WebSocket으로 /topic/presence 구독 → 실시간 상태 변경 수신
+1. WebSocket으로 현재 방의 /topic/room.{roomId}.presence 구독 → 실시간 상태 변경 수신
 2. REST API로 현재 온라인 멤버 목록 조회 → 초기 상태 표시
 
-이후: WebSocket으로 상태 변경만 수신 → REST API 호출 불필요 (효율적)
+이후: 선택한 방의 WebSocket topic에서 상태 변경만 수신합니다. 다른 방으로 이동하면 기존 topic을
+해제하고 새 room topic을 구독하며, 서버는 SUBSCRIBE 시 room membership을 다시 확인합니다.
 ```
 
 ---

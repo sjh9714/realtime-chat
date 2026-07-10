@@ -24,6 +24,9 @@ jwt:
   secret: test-jwt-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm
   expiration: 86400000
 
+chat:
+  allowed-origins: http://localhost
+
 logging:
   level:
     com.realtime.chat: DEBUG

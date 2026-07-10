@@ -51,14 +51,26 @@ class WebSocketAuthorizationInterceptorTest {
   }
 
   @Test
-  @DisplayName("room topic이 아닌 구독은 그대로 통과시킨다")
-  void nonRoomTopicPassesThrough() {
+  @DisplayName("전역 presence topic은 사용자 상태 노출을 막기 위해 거부한다")
+  void globalPresenceTopicIsRejected() {
     WebSocketAuthorizationInterceptor interceptor =
         new WebSocketAuthorizationInterceptor(chatRoomMemberRepository);
     Message<byte[]> message = subscribeMessage(10L, "/topic/presence");
 
-    Message<?> result = interceptor.preSend(message, null);
+    assertThatThrownBy(() -> interceptor.preSend(message, null))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessageContaining("전체 사용자 presence 구독은 허용되지 않습니다");
+  }
 
+  @Test
+  @DisplayName("채팅방 멤버만 해당 room presence topic을 구독할 수 있다")
+  void roomPresenceSubscriptionRequiresMembership() {
+    WebSocketAuthorizationInterceptor interceptor =
+        new WebSocketAuthorizationInterceptor(chatRoomMemberRepository);
+    Message<byte[]> message = subscribeMessage(10L, "/topic/room.20.presence");
+    given(chatRoomMemberRepository.existsByChatRoomIdAndUserId(20L, 10L)).willReturn(true);
+
+    Message<?> result = interceptor.preSend(message, null);
     assertThat(result).isSameAs(message);
   }
 
@@ -89,8 +101,44 @@ class WebSocketAuthorizationInterceptorTest {
         .hasMessageContaining("잘못된 채팅방 구독 경로입니다");
   }
 
+  @Test
+  @DisplayName("클라이언트 SEND는 chat과 heartbeat application destination만 허용한다")
+  void onlyApplicationSendDestinationsAreAllowed() {
+    WebSocketAuthorizationInterceptor interceptor =
+        new WebSocketAuthorizationInterceptor(chatRoomMemberRepository);
+
+    assertThat(interceptor.preSend(sendMessage(10L, "/app/chat.send"), null)).isNotNull();
+    assertThat(interceptor.preSend(sendMessage(10L, "/app/presence.heartbeat"), null)).isNotNull();
+  }
+
+  @Test
+  @DisplayName("broker와 임의 application destination으로 직접 SEND할 수 없다")
+  void directBrokerSendIsRejected() {
+    WebSocketAuthorizationInterceptor interceptor =
+        new WebSocketAuthorizationInterceptor(chatRoomMemberRepository);
+
+    for (String destination :
+        List.of(
+            "/topic/room.20",
+            "/queue/messages/ack",
+            "/user/queue/messages/persisted",
+            "/app/admin",
+            "/unknown")) {
+      assertThatThrownBy(() -> interceptor.preSend(sendMessage(10L, destination), null))
+          .isInstanceOf(AccessDeniedException.class)
+          .hasMessageContaining("허용되지 않은 메시지 전송 경로입니다");
+    }
+  }
+
   private Message<byte[]> subscribeMessage(Long userId, String destination) {
     StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+    accessor.setDestination(destination);
+    accessor.setUser(new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+    return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+  }
+
+  private Message<byte[]> sendMessage(Long userId, String destination) {
+    StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
     accessor.setDestination(destination);
     accessor.setUser(new UsernamePasswordAuthenticationToken(userId, null, List.of()));
     return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
