@@ -1,0 +1,12 @@
+.git
+.gradle
+build
+web/node_modules
+web/dist
+web/test-results
+docs/evidence
+artifacts
+*.log
+.env*
+*.env
+!.env.example

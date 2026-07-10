@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
@@ -91,6 +94,22 @@ jobs:
               Path("docs/REDIS_LIMITATIONS.md"),
           ]
           text = "\n".join(path.read_text(encoding="utf-8") for path in sources)
+          historical_archives = {
+              Path("docs/PERF_RESULT.md"),
+              Path("docs/WEBSOCKET_MEASUREMENT.md"),
+          }
+          public_doc_paths = [Path("README.md")] + [
+              path
+              for path in Path("docs").rglob("*.md")
+              if path not in historical_archives and "evidence" not in path.parts
+          ]
+          public_summary = "\n".join(
+              path.read_text(encoding="utf-8") for path in public_doc_paths
+          )
+
+          for path in historical_archives:
+              if "Historical unpinned archive" not in path.read_text(encoding="utf-8"):
+                  raise SystemExit(f"Historical archive warning missing: {path}")
 
           banned_terms = [
               "스모크 확인",
@@ -117,15 +136,42 @@ jobs:
                           f"Pending metric promoted to measured: {line}"
                       )
 
-          required_pending = [
-              "1,000 session send-to-receive latency | benchmark 미측정",
-              "1,000 session delivery completeness | benchmark 미측정",
-              "mixed traffic p95 latency | benchmark 미측정",
-              "mixed traffic cache hit rate는 추가 측정 예정",
+          forbidden_public_metrics = [
+              "937",
+              "1,598",
+              "212.85ms",
+              "149.22ms",
+              "1,158",
+              "99,900",
+              "1,000-user",
           ]
-          for phrase in required_pending:
-              if phrase not in text:
-                  raise SystemExit(f"Missing pending boundary phrase: {phrase}")
+          for metric in forbidden_public_metrics:
+              if metric in public_summary:
+                  raise SystemExit(
+                      f"Historical unpinned metric exposed as current evidence: {metric}"
+                  )
+
+          legacy_pipeline_terms = [
+              "Consumer1",
+              "Consumer 1",
+              "Consumer2",
+              "Consumer 2",
+              "publish(ChatMessageEvent",
+              "MessageBroadcastConsumer",
+              "broadcastListenerFactory",
+          ]
+          for term in legacy_pipeline_terms:
+              if term in public_summary:
+                  raise SystemExit(f"Deleted broadcast pipeline still documented: {term}")
+
+          required_boundaries = [
+              "현재 성능 주장: 없음",
+              "historical unpinned archive",
+              "현재 room-list와 persistence pipeline",
+          ]
+          for phrase in required_boundaries:
+              if phrase not in public_summary:
+                  raise SystemExit(f"Missing current-code evidence boundary: {phrase}")
 
           print("Docs evidence policy check passed")
           PY
@@ -151,3 +197,126 @@ jobs:
 
       - name: Inspect mixed k6 scenario
         run: k6 inspect k6/mixed-chat-test.js
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+  demo-e2e:
+    runs-on: ubuntu-latest
+    needs:
+      - test-and-build
+      - web
+    env:
+      CHAT_DB_PASSWORD: ci-only-long-database-password
+      JWT_SECRET: ci-only-jwt-secret-with-more-than-thirty-two-characters
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Start public demo stack
+        run: docker compose -f docker-compose.demo.yml up --build --detach --wait
+
+      - name: Verify public demo boundary
+        working-directory: web
+        run: E2E_PUBLIC_DEMO=true npm run e2e -- --grep 'public demo hides upstream'
+
+      - name: Start isolated E2E stack
+        run: docker compose -f docker-compose.demo.yml -f docker-compose.e2e.yml up --build --detach --force-recreate --wait
+
+      - name: Run browser E2E
+        working-directory: web
+        run: npm run e2e
+
+      - name: Print E2E logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.demo.yml -f docker-compose.e2e.yml logs --no-color
+
+      - name: Stop E2E stack
+        if: always()
+        run: docker compose -f docker-compose.demo.yml -f docker-compose.e2e.yml down --volumes
+
+  publish-merge-sha:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs:
+      - demo-e2e
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout merge SHA
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Normalize image prefix
+        id: image
+        shell: bash
+        run: echo "prefix=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish backend merge SHA image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.prefix }}/app:${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Publish web merge SHA image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          push: true
+          tags: ${{ steps.image.outputs.prefix }}/web:${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}

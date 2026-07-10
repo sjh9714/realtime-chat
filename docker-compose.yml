@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: chat
       POSTGRES_USER: chat
-      POSTGRES_PASSWORD: chat1234
+      POSTGRES_PASSWORD: ${CHAT_DB_PASSWORD:?CHAT_DB_PASSWORD is required}
     ports:
       - "5432:5432"
     volumes:
@@ -86,7 +86,7 @@ services:
     container_name: chat-grafana
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - ./monitoring/grafana/provisioning/dashboards/chat-dashboard.json:/var/lib/grafana/dashboards/chat-dashboard.json
@@ -103,9 +103,13 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
+      DB_USERNAME: chat
+      DB_PASSWORD: ${CHAT_DB_PASSWORD:?CHAT_DB_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CHAT_ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173}
     ports:
       - "8081:8080"
     depends_on:
@@ -122,9 +126,13 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
+      DB_USERNAME: chat
+      DB_PASSWORD: ${CHAT_DB_PASSWORD:?CHAT_DB_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      CHAT_ALLOWED_ORIGINS: ${CHAT_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173}
     ports:
       - "8082:8080"
     depends_on:

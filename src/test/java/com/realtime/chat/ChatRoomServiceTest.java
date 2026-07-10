@@ -15,6 +15,7 @@ import com.realtime.chat.dto.CreateDirectRoomRequest;
 import com.realtime.chat.dto.CreateGroupRoomRequest;
 import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.ChatRoomRepository;
+import com.realtime.chat.repository.MessageRepository;
 import com.realtime.chat.repository.UserRepository;
 import com.realtime.chat.service.ChatRoomService;
 import java.util.Optional;
@@ -34,8 +35,11 @@ class ChatRoomServiceTest {
 
   @Mock private UserRepository userRepository;
 
+  @Mock private MessageRepository messageRepository;
+
   private ChatRoomService chatRoomService() {
-    return new ChatRoomService(chatRoomRepository, chatRoomMemberRepository, userRepository);
+    return new ChatRoomService(
+        chatRoomRepository, chatRoomMemberRepository, messageRepository, userRepository);
   }
 
   private User createUser(Long id, String email, String nickname) {

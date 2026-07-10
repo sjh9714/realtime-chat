@@ -97,6 +97,71 @@ class WebSocketSubscribeAuthorizationIntegrationTest extends BaseIntegrationTest
     }
   }
 
+  @Test
+  @DisplayName("비멤버가 broker topic으로 직접 SEND해도 멤버에게 forged payload가 전달되지 않는다")
+  void outsiderCannotExploitDirectBrokerSend() throws Exception {
+    User member = userRepository.save(new User("victim@test.com", "encoded", "피해자"));
+    User outsider = userRepository.save(new User("attacker@test.com", "encoded", "공격자"));
+    ChatRoom room = new ChatRoom(null, RoomType.DIRECT, member);
+    room.addMember(member);
+    room = chatRoomRepository.saveAndFlush(room);
+
+    BlockingQueue<String> victimFrames = new LinkedBlockingQueue<>();
+    BlockingQueue<String> attackerFailures = new LinkedBlockingQueue<>();
+    WebSocketStompClient victimClient = stompClient();
+    WebSocketStompClient attackerClient = stompClient();
+    StompSession victimSession =
+        connect(victimClient, jwtTokenProvider.createToken(member.getId(), member.getEmail()), null);
+    StompSession attackerSession =
+        connect(
+            attackerClient,
+            jwtTokenProvider.createToken(outsider.getId(), outsider.getEmail()),
+            attackerFailures);
+
+    try {
+      victimSession.subscribe(
+          "/topic/room." + room.getId(), new CollectingFrameHandler(victimFrames));
+      Thread.sleep(200);
+
+      attackerSession.send("/topic/room." + room.getId(), "forged-outsider-payload");
+
+      await()
+          .atMost(5, TimeUnit.SECONDS)
+          .untilAsserted(
+              () -> assertThat(!attackerFailures.isEmpty() || !attackerSession.isConnected()).isTrue());
+      await()
+          .during(700, TimeUnit.MILLISECONDS)
+          .atMost(1, TimeUnit.SECONDS)
+          .untilAsserted(() -> assertThat(victimFrames).isEmpty());
+    } finally {
+      if (victimSession.isConnected()) victimSession.disconnect();
+      if (attackerSession.isConnected()) attackerSession.disconnect();
+      victimClient.stop();
+      attackerClient.stop();
+    }
+  }
+
+  private WebSocketStompClient stompClient() {
+    WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
+    client.setMessageConverter(new StringMessageConverter());
+    return client;
+  }
+
+  private StompSession connect(
+      WebSocketStompClient client, String token, BlockingQueue<String> failures) throws Exception {
+    StompHeaders connectHeaders = new StompHeaders();
+    connectHeaders.add("Authorization", "Bearer " + token);
+    StompSessionHandlerAdapter handler =
+        failures == null ? new StompSessionHandlerAdapter() {} : new CapturingSessionHandler(failures);
+    return client
+        .connectAsync(
+            "ws://localhost:" + port + "/ws",
+            new WebSocketHttpHeaders(),
+            connectHeaders,
+            handler)
+        .get(5, TimeUnit.SECONDS);
+  }
+
   private static class CapturingSessionHandler extends StompSessionHandlerAdapter {
 
     private final BlockingQueue<String> authorizationFailures;
@@ -140,5 +205,24 @@ class WebSocketSubscribeAuthorizationIntegrationTest extends BaseIntegrationTest
 
     @Override
     public void handleFrame(StompHeaders headers, Object payload) {}
+  }
+
+  private static class CollectingFrameHandler implements StompFrameHandler {
+
+    private final BlockingQueue<String> frames;
+
+    private CollectingFrameHandler(BlockingQueue<String> frames) {
+      this.frames = frames;
+    }
+
+    @Override
+    public Type getPayloadType(StompHeaders headers) {
+      return String.class;
+    }
+
+    @Override
+    public void handleFrame(StompHeaders headers, Object payload) {
+      frames.add(String.valueOf(payload));
+    }
   }
 }

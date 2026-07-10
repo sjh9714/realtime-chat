@@ -1,5 +1,10 @@
 # WebSocket latency / delivery measurement plan
 
+> [!WARNING]
+> Historical unpinned archive입니다. 이 문서의 기존 결과는 현재 room-list와 persistence pipeline의
+> commit-pinned 측정이 아니므로 현재 코드의 성능 evidence로 사용하지 않습니다. 공개 성능 수치는 현재
+> commit에서 환경·명령·raw artifact를 고정해 재측정한 뒤에만 갱신합니다.
+
 이 문서는 WebSocket 메시지의 send-to-receive latency와 delivery completeness를 측정하기 위한 계획이다.
 
 receiver matrix low-rate baseline, 50-user local receiver repeat3, 500-user local receiver repeat3,

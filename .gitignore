@@ -50,6 +50,18 @@ docker-compose.override.yml
 
 ### Env ###
 .env
+.env.*
+*.env
+!.env.example
+
+### Web ###
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
+web/*.tsbuildinfo
+.playwright-cli/
+output/playwright/
 
 ### Claude Code ###
 .claude/

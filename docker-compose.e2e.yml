@@ -1,0 +1,16 @@
+services:
+  app-1:
+    environment:
+      SPRING_PROFILES_ACTIVE: demo,e2e
+      CHAT_E2E_INSTANCE_ID: app-1
+      CHAT_KAFKA_RETRY_BACKOFF_MS: 2500
+
+  app-2:
+    environment:
+      SPRING_PROFILES_ACTIVE: demo,e2e
+      CHAT_E2E_INSTANCE_ID: app-2
+      CHAT_KAFKA_RETRY_BACKOFF_MS: 2500
+
+  gateway:
+    volumes:
+      - ./docker/e2e-gateway.conf:/etc/nginx/conf.d/default.conf:ro

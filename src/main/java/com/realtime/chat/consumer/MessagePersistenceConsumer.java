@@ -1,145 +1,59 @@
 package com.realtime.chat.consumer;
 
-import com.realtime.chat.common.BusinessException;
 import com.realtime.chat.config.KafkaConfig;
-import com.realtime.chat.domain.ChatRoom;
-import com.realtime.chat.domain.Message;
-import com.realtime.chat.domain.User;
 import com.realtime.chat.dto.MessagePersistedNotification;
 import com.realtime.chat.event.ChatMessageEvent;
-import com.realtime.chat.repository.ChatRoomMemberRepository;
-import com.realtime.chat.repository.ChatRoomRepository;
-import com.realtime.chat.repository.MessageRepository;
-import com.realtime.chat.repository.UserRepository;
+import com.realtime.chat.service.MessagePersistenceService;
+import com.realtime.chat.service.PersistedMessageResult;
 import com.realtime.chat.service.RedisPubSubService;
 import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.Timer;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.cache.CacheManager;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-// Consumer Group 1: 메시지를 DB에 저장 + 멱등성 체크 + unreadCount 증가
+// DB commit 이후에만 Redis/STOMP fan-out을 시작한다.
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class MessagePersistenceConsumer {
 
-  private final MessageRepository messageRepository;
-  private final ChatRoomRepository chatRoomRepository;
-  private final UserRepository userRepository;
-  private final ChatRoomMemberRepository chatRoomMemberRepository;
-  @Qualifier("messagesPersistedCounter")
-  private final Counter messagesPersistedCounter;
+  private final MessagePersistenceService messagePersistenceService;
   @Qualifier("messagesFailedCounter")
   private final Counter messagesFailedCounter;
-  @Qualifier("messagesLatencyTimer")
-  private final Timer messagesLatencyTimer;
-  @Qualifier("roomsCacheEvictionsCounter")
-  private final Counter roomsCacheEvictionsCounter;
-  private final CacheManager cacheManager;
   private final RedisPubSubService redisPubSubService;
 
   @KafkaListener(
       topics = KafkaConfig.MESSAGES_TOPIC,
       containerFactory = "persistenceListenerFactory")
-  @Transactional
   public void consume(ConsumerRecord<String, ChatMessageEvent> record, Acknowledgment ack) {
     ChatMessageEvent event = record.value();
     log.debug(
         "메시지 수신 (persistence): messageKey={}, roomId={}", event.getMessageKey(), event.getRoomId());
 
     try {
-      // 멱등성 체크: 동일 messageKey가 이미 저장되어 있으면 스킵
-      if (messageRepository.existsByMessageKey(event.getMessageKey())) {
-        log.info("중복 메시지 스킵: messageKey={}", event.getMessageKey());
-        publishPersistedIfExisting(
-            messageRepository.findByMessageKey(event.getMessageKey()), event);
-        ack.acknowledge();
-        return;
+      // @Transactional service가 반환된 시점에는 DB commit이 완료되어 있다.
+      PersistedMessageResult result =
+          messagePersistenceService.persist(event, record.partition(), record.offset());
+
+      // Redis 실패 시 예외를 재전파한다. Kafka redelivery는 기존 DB row를 찾아 같은 payload를
+      // 재발행하고, 클라이언트는 id/clientMessageId로 중복을 제거한다.
+      if (result.shouldBroadcast()) {
+        redisPubSubService.publishPersistedMessage(result.message());
       }
-      if (isDuplicateClientMessage(event)) {
-        log.info(
-            "중복 클라이언트 메시지 스킵: senderId={}, clientMessageId={}",
-            event.getSenderId(),
-            event.getClientMessageId());
-        publishPersistedIfExisting(findByClientMessage(event), event);
-        ack.acknowledge();
-        return;
-      }
-
-      ChatRoom room =
-          chatRoomRepository
-              .findById(event.getRoomId())
-              .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "채팅방을 찾을 수 없습니다."));
-      User sender =
-          userRepository
-              .findById(event.getSenderId())
-              .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."));
-
-      Message message =
-          new Message(
-              event.getMessageKey(),
-              event.getClientMessageId(),
-              room,
-              sender,
-              event.getContent(),
-              event.getType());
-      message.updateKafkaMetadata(record.partition(), record.offset());
-      try {
-        messageRepository.saveAndFlush(message);
-      } catch (DataIntegrityViolationException e) {
-        if (isDuplicateMessage(event)) {
-          log.info(
-              "중복 메시지 unique 충돌 스킵: messageKey={}, senderId={}, clientMessageId={}",
-              event.getMessageKey(),
-              event.getSenderId(),
-              event.getClientMessageId());
-          publishPersistedIfExisting(findDuplicateMessage(event), event);
-          ack.acknowledge();
-          return;
-        }
-        throw e;
-      }
-
-      // 발신자를 제외한 멤버들의 unreadCount 증가 + 해당 방 멤버 캐시만 무효화
-      chatRoomMemberRepository.incrementUnreadCountForOtherMembers(
-          event.getRoomId(), event.getSenderId());
-      var roomsCache = cacheManager.getCache("rooms");
-      if (roomsCache != null) {
-        chatRoomMemberRepository
-            .findUserIdsByRoomId(event.getRoomId())
-            .forEach(
-                userId -> {
-                  roomsCache.evict(userId);
-                  roomsCacheEvictionsCounter.increment();
-                });
-      }
-
-      publishPersisted(message, event);
-
-      // 메트릭: 저장 성공 + 지연시간
-      messagesPersistedCounter.increment();
-      Duration latency = Duration.between(event.getTimestamp(), LocalDateTime.now());
-      messagesLatencyTimer.record(latency);
+      redisPubSubService.publishPersisted(
+          MessagePersistedNotification.from(result.message(), event.getSenderId()));
 
       ack.acknowledge();
       log.debug(
-          "메시지 저장 완료: messageKey={}, id={}, latency={}ms",
+          "메시지 처리 완료: messageKey={}, id={}, newlyCreated={}, shouldBroadcast={}",
           event.getMessageKey(),
-          message.getId(),
-          latency.toMillis());
+          result.message().getId(),
+          result.newlyCreated(),
+          result.shouldBroadcast());
 
     } catch (Exception e) {
       messagesFailedCounter.increment();
@@ -152,41 +66,5 @@ public class MessagePersistenceConsumer {
           e);
       throw e; // ErrorHandler가 재시도 후 DLT로 보냄
     }
-  }
-
-  private boolean isDuplicateMessage(ChatMessageEvent event) {
-    return messageRepository.existsByMessageKey(event.getMessageKey())
-        || isDuplicateClientMessage(event);
-  }
-
-  private boolean isDuplicateClientMessage(ChatMessageEvent event) {
-    UUID clientMessageId = event.getClientMessageId();
-    return clientMessageId != null
-        && messageRepository.existsBySenderIdAndClientMessageId(
-            event.getSenderId(), clientMessageId);
-  }
-
-  private Optional<Message> findDuplicateMessage(ChatMessageEvent event) {
-    return messageRepository
-        .findByMessageKey(event.getMessageKey())
-        .or(() -> findByClientMessage(event));
-  }
-
-  private Optional<Message> findByClientMessage(ChatMessageEvent event) {
-    UUID clientMessageId = event.getClientMessageId();
-    if (clientMessageId == null) {
-      return Optional.empty();
-    }
-    return messageRepository.findBySenderIdAndClientMessageId(
-        event.getSenderId(), clientMessageId);
-  }
-
-  private void publishPersistedIfExisting(Optional<Message> message, ChatMessageEvent event) {
-    message.ifPresent(existingMessage -> publishPersisted(existingMessage, event));
-  }
-
-  private void publishPersisted(Message message, ChatMessageEvent event) {
-    redisPubSubService.publishPersisted(
-        MessagePersistedNotification.from(message, event.getSenderId(), event.getRoomId()));
   }
 }
