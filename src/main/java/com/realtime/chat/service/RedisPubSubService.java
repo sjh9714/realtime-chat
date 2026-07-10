@@ -4,8 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.realtime.chat.config.RedisConfig;
 import com.realtime.chat.dto.MessagePersistedNotification;
 import com.realtime.chat.dto.MessagePersistedResponse;
+import com.realtime.chat.dto.MessageResponse;
 import com.realtime.chat.dto.PresenceEvent;
-import com.realtime.chat.event.ChatMessageEvent;
+import com.realtime.chat.repository.ChatRoomMemberRepository;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
@@ -26,20 +27,31 @@ public class RedisPubSubService {
   private final StringRedisTemplate redisTemplate;
   private final SimpMessagingTemplate messagingTemplate;
   private final ObjectMapper objectMapper;
+  private final ChatRoomMemberRepository chatRoomMemberRepository;
+  private final PersistenceFailureProbe failureProbe;
   @Qualifier("messagesReceivedCounter")
   private final Counter messagesReceivedCounter;
   @Qualifier("roomFanoutLatencyTimer")
   private final Timer roomFanoutLatencyTimer;
 
-  // Redis 채널에 메시지 발행 (Kafka Consumer → Redis)
-  public void publish(ChatMessageEvent event) {
+  // DB commit이 끝난 메시지만 Redis 채널에 발행한다.
+  public void publishPersistedMessage(MessageResponse messageResponse) {
     try {
-      String channel = RedisConfig.CHAT_ROOM_CHANNEL_PREFIX + event.getRoomId();
-      String message = objectMapper.writeValueAsString(event);
+      failureProbe.beforeRedisPublish(messageResponse);
+      String channel = RedisConfig.CHAT_ROOM_CHANNEL_PREFIX + messageResponse.getRoomId();
+      String message = objectMapper.writeValueAsString(messageResponse);
       redisTemplate.convertAndSend(channel, message);
-      log.debug("Redis 발행: channel={}, messageKey={}", channel, event.getMessageKey());
+      log.debug(
+          "Redis PERSISTED 메시지 발행: channel={}, messageId={}, clientMessageId={}",
+          channel,
+          messageResponse.getId(),
+          messageResponse.getClientMessageId());
     } catch (Exception e) {
-      log.error("Redis 발행 실패: messageKey={}", event.getMessageKey(), e);
+      log.error(
+          "Redis PERSISTED 메시지 발행 실패: messageId={}, clientMessageId={}",
+          messageResponse.getId(),
+          messageResponse.getClientMessageId(),
+          e);
       throw new IllegalStateException("Redis publish failed", e);
     }
   }
@@ -70,15 +82,22 @@ public class RedisPubSubService {
           notification.getTargetUserId(),
           notification.getMessageKey(),
           e);
+      throw new IllegalStateException("Redis persisted notification publish failed", e);
     }
   }
 
-  // Redis 구독 Presence 이벤트 수신 → STOMP로 전체 브로드캐스트
+  // Redis 구독 Presence 이벤트 수신 → 사용자가 속한 room별 topic으로만 fan-out
   public void onPresenceMessage(String message, String channel) {
     try {
       PresenceEvent event = objectMapper.readValue(message, PresenceEvent.class);
-      messagingTemplate.convertAndSend("/topic/presence", event);
-      log.debug("Presence 브로드캐스트: userId={}, status={}", event.getUserId(), event.getStatus());
+      chatRoomMemberRepository
+          .findRoomIdsByUserId(event.getUserId())
+          .forEach(
+              roomId ->
+                  messagingTemplate.convertAndSend(
+                      "/topic/room." + roomId + ".presence", event));
+      log.debug(
+          "Presence room fan-out: userId={}, status={}", event.getUserId(), event.getStatus());
     } catch (Exception e) {
       log.error("Presence 브로드캐스트 실패: channel={}", channel, e);
     }
@@ -106,14 +125,17 @@ public class RedisPubSubService {
   public void onMessage(String message, String channel) {
     Instant startedAt = Instant.now();
     try {
-      ChatMessageEvent event = objectMapper.readValue(message, ChatMessageEvent.class);
+      MessageResponse event = objectMapper.readValue(message, MessageResponse.class);
       String destination = "/topic/room." + event.getRoomId();
 
       messagingTemplate.convertAndSend(destination, event);
       messagesReceivedCounter.increment();
       roomFanoutLatencyTimer.record(Duration.between(startedAt, Instant.now()));
       log.debug(
-          "WebSocket 브로드캐스트: destination={}, messageKey={}", destination, event.getMessageKey());
+          "WebSocket PERSISTED 브로드캐스트: destination={}, messageId={}, clientMessageId={}",
+          destination,
+          event.getId(),
+          event.getClientMessageId());
     } catch (Exception e) {
       log.error("WebSocket 브로드캐스트 실패: channel={}", channel, e);
     }

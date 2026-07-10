@@ -10,6 +10,7 @@ import com.realtime.chat.producer.ChatMessageProducer;
 import com.realtime.chat.repository.ChatRoomMemberRepository;
 import com.realtime.chat.repository.UserRepository;
 import io.micrometer.core.instrument.Counter;
+import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
@@ -40,7 +41,7 @@ public class ChatMessageController {
 
   // 클라이언트가 /app/chat.send로 메시지를 보내면 Kafka로 발행
   @MessageMapping("/chat.send")
-  public void sendMessage(@Payload SendMessageRequest request, Principal principal) {
+  public void sendMessage(@Valid @Payload SendMessageRequest request, Principal principal) {
     Long userId = Long.parseLong(principal.getName());
     String userDestination = principal.getName();
     UUID clientMessageId = resolveClientMessageId(request);
@@ -100,6 +101,7 @@ public class ChatMessageController {
   private String failureReason(Throwable ex) {
     Throwable cause =
         ex instanceof CompletionException && ex.getCause() != null ? ex.getCause() : ex;
-    return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+    log.debug("Kafka publish failure cause: {}", cause.getClass().getSimpleName());
+    return "메시지 큐에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.";
   }
 }

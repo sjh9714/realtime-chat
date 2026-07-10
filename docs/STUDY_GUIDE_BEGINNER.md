@@ -263,10 +263,12 @@ eyJhbGciOiJIUzI1NiJ9        ← 봉투 (어떤 방식으로 서명했는지)
    → Consumer가 "나는 2번까지 읽었어" 라고 기록
    → 다음에는 3번부터 읽음
 
-👥 Consumer Group = 같은 편지를 다른 용도로 쓰는 팀
-   팀 A (chat-persistence): 편지를 복사해서 창고(DB)에 보관
-   팀 B (chat-broadcast):   편지를 읽고 모든 사람에게 방송
-   → 같은 편지를 2팀이 각각 처리!
+👥 Consumer Group = 파티션의 편지를 나눠 읽는 팀
+   chat-persistence 팀:
+   1) 편지를 창고(DB)에 보관하고 commit
+   2) 보관된 번호를 붙여 Redis 방송
+   3) 끝난 뒤 Kafka에 ack
+   → 같은 방의 저장과 방송 순서가 뒤집히지 않음!
 ```
 
 ### WebSocket — "전화 통화"
@@ -392,8 +394,7 @@ src/main/java/com/realtime/chat/        ← 우리 회사
 │
 ├── 📨 consumer/        = 택배 수령팀
 │   │                     "Kafka에서 메시지를 받아 처리하는 팀"
-│   ├── MessagePersistenceConsumer → 택배 받으면 창고(DB)에 보관
-│   ├── MessageBroadcastConsumer   → 택배 받으면 방송(Redis)으로 알림
+│   ├── MessagePersistenceConsumer → DB commit 후 Redis 알림까지 순서대로 처리
 │   └── ReadReceiptConsumer        → "읽음 확인" 택배 받아서 처리
 │
 ├── 📤 producer/        = 택배 발송팀
@@ -945,29 +946,49 @@ public void sendMessage(@Payload SendMessageRequest request, Principal principal
 문제 2: 서버 2대면? A는 서버1, B는 서버2 → 서버1이 B에게 못 보냄!
 
 [Kafka 경유 방식 — 우리 선택]
-사용자A → 서버 → Kafka → Consumer1(DB 저장) + Consumer2(전달)
+사용자A → 서버 → Kafka → MessagePersistenceConsumer
+→ MessagePersistenceService.persist()가 DB 저장과 안읽은 수 갱신을 transaction commit
+→ commit된 MessageResponse를 Redis room 채널과 발신자 PERSISTED 알림에 발행
+→ 발행이 끝난 뒤 Kafka ACK
 장점 1: Kafka가 메시지를 안전하게 보관, 실패해도 재시도 가능
-장점 2: 서버가 몇 대든 Consumer가 알아서 처리
-장점 3: 저장과 전달이 독립적 → 하나가 느려도 다른 것에 영향 없음
+장점 2: DB에 저장되지 않은 메시지가 사용자에게 먼저 보이는 순서 역전을 막음
+장점 3: 서버가 여러 대여도 Redis Pub/Sub로 commit된 같은 payload를 전달
 
 단점: Kafka 경유와 fan-out 단계가 추가되므로 send-to-receive 지연 시간은 별도 benchmark로 측정해야 함
 ```
 
+### MessagePersistenceConsumer — "저장한 뒤 방송"
+
+```java
+PersistedMessageResult result =
+        messagePersistenceService.persist(event, record.partition(), record.offset());
+// @Transactional persist()가 반환되면 PostgreSQL commit 완료
+
+if (result.shouldBroadcast()) {
+    redisPubSubService.publishPersistedMessage(result.message());
+}
+redisPubSubService.publishPersisted(
+        MessagePersistedNotification.from(result.message(), event.getSenderId()));
+ack.acknowledge();
+```
+
+`result.message()`는 DB `id`와 `messageKey`를 가진 `MessageResponse`입니다. Redis room 발행이나 발신자
+PERSISTED 알림이 실패하면 ACK하지 않아 Kafka가 다시 전달하고, 이미 저장된 row를 멱등 재사용합니다.
+
 ### Redis Pub/Sub — "사내 방송"
 
 ```java
-// Kafka Consumer 2가 Redis로 방송
-public void publish(ChatMessageEvent event) {
-    String channel = "chat:room:" + event.getRoomId();   // "chat:room:1"
-    String message = objectMapper.writeValueAsString(event);  // JSON으로 변환
+// DB commit 뒤 MessagePersistenceConsumer가 호출
+public void publishPersistedMessage(MessageResponse messageResponse) {
+    String channel = RedisConfig.CHAT_ROOM_CHANNEL_PREFIX + messageResponse.getRoomId();
+    String message = objectMapper.writeValueAsString(messageResponse);
     redisTemplate.convertAndSend(channel, message);  // 방송!
 }
 
 // 모든 서버가 방송을 수신
 public void onMessage(String message, String channel) {
-    ChatMessageEvent event = objectMapper.readValue(message, ChatMessageEvent.class);
-    String roomId = channel.replace("chat:room:", "");
-    messagingTemplate.convertAndSend("/topic/room." + roomId, event);
+    MessageResponse event = objectMapper.readValue(message, MessageResponse.class);
+    messagingTemplate.convertAndSend("/topic/room." + event.getRoomId(), event);
     // ↑ 이 서버에서 1번 방을 구독 중인 모든 WebSocket 클라이언트에게 전달!
 }
 ```
@@ -979,12 +1000,13 @@ public void onMessage(String message, String channel) {
 사용자 A, C 연결                       사용자 B, D 연결
 
 1. 사용자 A가 1번 방에 "안녕" 전송
-2. 서버1 → Kafka → Consumer2 → Redis 방송: "chat:room:1에 새 메시지!"
+2. 서버1 → Kafka → MessagePersistenceConsumer → DB commit
+3. commit된 MessageResponse를 Redis 방송: "chat:room:1에 저장된 새 메시지!"
 
-3. 서버1: 방송 들음 → "나한테 연결된 사용자 중 1번 방 구독자?"
+4. 서버1: 방송 들음 → "나한테 연결된 사용자 중 1번 방 구독자?"
    → 사용자 A, C 중 1번 방 구독자에게 전달
 
-4. 서버2: 방송 들음 → "나한테 연결된 사용자 중 1번 방 구독자?"
+5. 서버2: 방송 들음 → "나한테 연결된 사용자 중 1번 방 구독자?"
    → 사용자 B, D 중 1번 방 구독자에게 전달
 
 → 어느 서버에 연결되어 있든 메시지를 받을 수 있음!
@@ -1221,22 +1243,18 @@ void 회원가입_로그인_토큰인증_전체흐름() {
 [정류장 4] Kafka
   │  chat.messages 토픽, 파티션 3, offset 42에 기록
   │
-  │  2개 팀이 각각 수령:
-  ├──────────────────────────────────┐
-  │                                  │
-  ▼                                  ▼
-[정류장 5-A]                    [정류장 5-B]
-MessagePersistenceConsumer      MessageBroadcastConsumer
-  │                                  │
-  │ "messageKey 이미 있어?"           │ "Redis로 방송!"
-  │ → 없음 → DB에 저장!             │ → PUBLISH "chat:room:1"
-  │ → unreadCount +1                │
-  │ → ack (처리 완료!)              │ → ack (처리 완료!)
-  │                                  │
-  │                                  ▼
-  │                            [정류장 6] Redis Pub/Sub
-  │                                  │
-  │                            "chat:room:1" 채널에 방송!
+  ▼
+[정류장 5] MessagePersistenceConsumer
+  │ "messageKey/clientMessageId 이미 있어?"
+  │ → 새 메시지면 DB 저장 + unreadCount +1
+  │ → PostgreSQL transaction commit
+  │ → commit된 DB id를 포함해 PUBLISH "chat:room:1"
+  │ → 발신자 PERSISTED 알림
+  │ → ack (처리 완료!)
+  │
+  ▼
+[정류장 6] Redis Pub/Sub
+  │ "chat:room:1" 채널에 commit된 메시지만 방송!
   │                                  │
   │                            ┌─────┴─────┐
   │                            ▼           ▼
@@ -1630,8 +1648,9 @@ Redis Pub/Sub로 모든 서버에 방송: "1번 유저가 접속했어요!"
 → RedisPubSubService가 담당
 
 [4단계: 전달]
-STOMP로 클라이언트에게 전달: /topic/presence
-→ 클라이언트 화면에 "철수님 접속 중" 표시
+서버가 이 사용자가 속한 채팅방을 찾은 뒤 방별 STOMP topic으로 전달:
+/topic/room.{roomId}.presence
+→ 현재 방의 인가된 topic을 구독한 멤버 화면에만 "철수님 접속 중" 표시
 ```
 
 ### 각 단계 자세히
@@ -1764,10 +1783,11 @@ public class PresenceService {
 
 흐름:
 서버1: "A 접속!" → Redis PUBLISH "chat:presence" → 모든 서버에 전달
-서버1: 방송 수신 → /topic/presence로 → 사용자 A에게 알림
-서버2: 방송 수신 → /topic/presence로 → 사용자 B에게 알림
+서버1: 방송 수신 → A가 속한 room 조회 → /topic/room.{roomId}.presence로 전달
+서버2: 방송 수신 → A가 속한 room 조회 → /topic/room.{roomId}.presence로 전달
 
-결과: A, B 모두 "A가 접속 중"이라는 것을 알게 됨!
+클라이언트는 현재 선택한 방의 topic만 구독합니다. A와 같은 방의 멤버인 B가 그 방을 보고 있다면
+"A가 접속 중"을 받고, 관계없는 방의 사용자는 받지 않습니다. room topic 구독 때도 서버가 멤버인지 확인합니다.
 ```
 
 ### REST API — 채팅방 입장 시 초기 상태
@@ -1788,10 +1808,11 @@ public ResponseEntity<Set<Long>> getOnlineMembers(@PathVariable Long roomId) {
 
 채팅방에 들어올 때:
 1. REST API로 현재 접속 중인 멤버 목록 가져오기 (초기 상태)
-2. WebSocket으로 /topic/presence 구독 (이후 변경 사항 실시간 수신)
+2. WebSocket으로 /topic/room.{roomId}.presence 구독 (이후 이 방의 변경만 실시간 수신)
 
 → 처음에는 REST API로 현재 상태를 가져오고
-→ 이후에는 WebSocket으로 변경만 수신 (효율적!)
+→ 이후에는 선택한 방의 WebSocket topic으로 변경만 수신
+→ 다른 방으로 이동하면 기존 구독을 해제하고 새 방 topic을 구독
 ```
 
 ---
@@ -2168,7 +2189,7 @@ After:  채팅방 10개 → DB 쿼리 1개 (+ 캐시 히트 시 0개)
 5. 발신자 조회용 (sender_id): 관리/검색 기능용
 
 대표 조회 경로는 인덱스 사용 여부를 확인해야 합니다.
-현재 공개 성능 주장은 PERF_RESULT.md에 남긴 k6 결과와 쿼리 개선 범위로 한정합니다.
+현재 room-list와 persistence pipeline 기준으로 다시 측정하기 전에는 처리량이나 지연 시간을 공개 성능으로 주장하지 않습니다.
 ```
 
 ---
@@ -2192,22 +2213,16 @@ After:  채팅방 10개 → DB 쿼리 1개 (+ 캐시 히트 시 0개)
 → 최적화 전(N+1)과 후(단일 쿼리+캐시)를 비교
 ```
 
-### 결과 (Before vs After)
+### 현재 공개할 수 있는 결과
 
-```
-┌──────────────┬──────────┬──────────┬──────────┐
-│   메트릭      │  Before  │  After   │  개선    │
-├──────────────┼──────────┼──────────┼──────────┤
-│ 초당 처리량   │  937 RPS │ 1,598 RPS│  +70%   │
-│ 응답시간 중앙 │  54ms    │  16ms    │  -69%   │
-│ 응답시간 p95  │  212ms   │  149ms   │  -30%   │
-│ 총 처리량     │  67,417  │ 118,900  │  +76%   │
-└──────────────┴──────────┴──────────┴──────────┘
+과거 수치는 현재 room-list와 persistence pipeline 이전의 historical unpinned archive입니다. 현재 코드와
+같은 commit에서 환경·명령·raw artifact를 고정해 재측정하지 않았으므로 이 학습 가이드에서는 수치를
+제시하지 않습니다.
 
-WebSocket: 579 동시 세션, 두 인스턴스 local smoke 합산 1,158 세션 (선형 확장 claim 아님)
-```
+현재 검증 범위는 부하 도구의 실행 방법과 query/pipeline 정합성 테스트입니다. 처리량·지연·동시 접속
+결과는 재측정한 artifact에 commit permalink를 붙인 뒤에만 공개합니다.
 
-> 자세한 분석은 [성능 최적화 기록](PERF_RESULT.md)을 참고하세요.
+> 이전 실험의 방법론은 [성능 최적화 기록](PERF_RESULT.md)에 archive로 남아 있으며 현재 코드 evidence가 아닙니다.
 
 ---
 
@@ -2279,25 +2294,19 @@ user.updateLastSeenAt();                 // "마지막 접속 시각 갱신"
 메서드: 자판기 → "콜라 버튼", "사이다 버튼"만 있음 (안전!)
 ```
 
-### Q: 왜 Kafka Consumer가 2개 그룹이야? 1개로 하면 안 돼?
+### Q: 왜 DB 저장 뒤에 Redis 방송을 해야 해?
 
 ```
-1개 Consumer로 "DB 저장 + 방송"을 같이 하면?
+방송이 먼저 나가면 사용자는 메시지를 봤는데 DB에는 없는 상태가 될 수 있습니다.
 
-문제 1: DB 저장이 느려지면 방송도 느려짐
-→ 1개가 모든 일을 하니까, 하나가 밀리면 전부 밀림
+현재 순서:
+1. DB message/unread commit
+2. commit된 id/clientMessageId로 Redis 방송
+3. 발신자에게 PERSISTED 알림
+4. Kafka ack
 
-문제 2: 방송 에러가 나면 DB 저장도 실패?
-→ 하나의 트랜잭션에서 처리하면 그럴 수 있음
-
-2개 Consumer Group으로 분리하면:
-→ DB 저장이 느려도 방송은 독립적으로 동작
-→ 방송 에러가 나도 DB 저장은 정상 진행
-→ 각각 독립적으로 스케일 조절 가능
-
-비유: 회사에서 영업팀과 물류팀을 분리하는 것
-→ 영업이 바빠도 물류는 자기 속도로 일함
-→ 물류에 문제가 생겨도 영업은 계속 주문을 받음
+Redis 방송이 실패하면 Kafka가 같은 record를 다시 전달합니다.
+DB에는 이미 한 건만 있고, 그 row를 다시 읽어 방송하므로 저장 중복이 생기지 않습니다.
 ```
 
 ### Q: 이 프로젝트 코드를 읽는 순서?

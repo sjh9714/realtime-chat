@@ -38,4 +38,15 @@ public class MessagePersistedNotification {
         roomId,
         LocalDateTime.now());
   }
+
+  public static MessagePersistedNotification from(
+      MessageResponse message, Long targetUserId) {
+    return new MessagePersistedNotification(
+        targetUserId,
+        message.getClientMessageId(),
+        message.getMessageKey(),
+        message.getId(),
+        message.getRoomId(),
+        LocalDateTime.now());
+  }
 }

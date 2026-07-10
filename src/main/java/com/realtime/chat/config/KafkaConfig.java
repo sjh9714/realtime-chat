@@ -35,6 +35,12 @@ public class KafkaConfig {
   @Value("${spring.kafka.bootstrap-servers}")
   private String bootstrapServers;
 
+  @Value("${chat.kafka.retry-backoff-ms:1000}")
+  private long retryBackoffMs;
+
+  @Value("${chat.kafka.retry-attempts:3}")
+  private long retryAttempts;
+
   // 토픽 생성
   @Bean
   public NewTopic messagesTopic() {
@@ -96,14 +102,6 @@ public class KafkaConfig {
     return createListenerFactory("chat-persistence", kafkaTemplate, dltRoutedCounter);
   }
 
-  // 브로드캐스트용 Consumer (Group 2)
-  @Bean
-  public ConcurrentKafkaListenerContainerFactory<String, Object> broadcastListenerFactory(
-      KafkaTemplate<String, Object> kafkaTemplate,
-      @Qualifier("dltRoutedCounter") Counter dltRoutedCounter) {
-    return createListenerFactory("chat-broadcast", kafkaTemplate, dltRoutedCounter);
-  }
-
   // 읽음 처리용 Consumer
   @Bean
   public ConcurrentKafkaListenerContainerFactory<String, Object> readReceiptListenerFactory(
@@ -125,7 +123,8 @@ public class KafkaConfig {
     // 3회 재시도 후 DLT로 격리
     DefaultErrorHandler errorHandler =
         new DefaultErrorHandler(
-            deadLetterRecoverer(kafkaTemplate, dltRoutedCounter), new FixedBackOff(1000L, 3));
+            deadLetterRecoverer(kafkaTemplate, dltRoutedCounter),
+            new FixedBackOff(retryBackoffMs, retryAttempts));
     factory.setCommonErrorHandler(errorHandler);
 
     return factory;

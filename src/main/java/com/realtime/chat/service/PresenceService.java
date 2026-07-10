@@ -6,10 +6,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.realtime.chat.common.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
 
 // Redis 기반 온라인/오프라인 상태 관리
 @Slf4j
@@ -98,6 +100,13 @@ public class PresenceService {
             .collect(Collectors.toList());
 
     return memberUserIds.stream().filter(this::isOnline).collect(Collectors.toSet());
+  }
+
+  public Set<Long> getOnlineMembers(Long requesterId, Long roomId) {
+    if (!chatRoomMemberRepository.existsByChatRoomIdAndUserId(roomId, requesterId)) {
+      throw new BusinessException(HttpStatus.FORBIDDEN, "채팅방에 참여하지 않은 사용자입니다.");
+    }
+    return getOnlineMembers(roomId);
   }
 
   private Set<String> activeSessionIds(Long userId) {

@@ -1,6 +1,8 @@
 package com.realtime.chat.config;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -16,6 +18,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
   private final WebSocketAuthInterceptor webSocketAuthInterceptor;
   private final WebSocketAuthorizationInterceptor webSocketAuthorizationInterceptor;
   private final RateLimitInterceptor rateLimitInterceptor;
+  private final ObjectProvider<E2eHandshakeInstanceInterceptor> e2eInstanceInterceptor;
+
+  @Value("${chat.allowed-origins}")
+  private String[] allowedOrigins;
 
   @Override
   public void configureMessageBroker(MessageBrokerRegistry registry) {
@@ -28,7 +34,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
   @Override
   public void registerStompEndpoints(StompEndpointRegistry registry) {
-    registry.addEndpoint("/ws").setAllowedOriginPatterns("*");
+    var endpoint = registry.addEndpoint("/ws").setAllowedOrigins(allowedOrigins);
+    e2eInstanceInterceptor.ifAvailable(endpoint::addInterceptors);
   }
 
   @Override

@@ -37,6 +37,7 @@ class PresenceIntegrationTest extends BaseIntegrationTest {
 
   private String baseUrl;
   private String token1;
+  private String token3;
   private Long user1Id;
   private Long user2Id;
   private Long roomId;
@@ -51,6 +52,7 @@ class PresenceIntegrationTest extends BaseIntegrationTest {
 
     token1 = signup("user1@test.com", "password123", "유저1");
     signup("user2@test.com", "password123", "유저2");
+    token3 = signup("user3@test.com", "password123", "유저3");
     user1Id = userRepository.findByEmail("user1@test.com").get().getId();
     user2Id = userRepository.findByEmail("user2@test.com").get().getId();
 
@@ -100,6 +102,19 @@ class PresenceIntegrationTest extends BaseIntegrationTest {
             new ParameterizedTypeReference<>() {});
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).containsExactlyInAnyOrder(user1Id, user2Id);
+  }
+
+  @Test
+  @DisplayName("비멤버는 채팅방 presence REST 조회를 할 수 없다")
+  void nonMemberCannotReadRoomPresence() {
+    ResponseEntity<String> response =
+        restTemplate.exchange(
+            baseUrl + "/api/rooms/" + roomId + "/members/online",
+            HttpMethod.GET,
+            new HttpEntity<>(authHeaders(token3)),
+            String.class);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
   }
 
   private String signup(String email, String password, String nickname) {
