@@ -61,7 +61,9 @@ Reconnect
 
 메시지 저장과 브로드캐스트는 하나의 순서 경계로 묶는다. persistence transaction이 반환되어 commit된 뒤에만 room event와 sender PERSISTED를 Redis에 발행한다. Redis 발행이 실패하면 Kafka ack를 하지 않아 redelivery되고, 기존 DB row를 다시 조회해 같은 `id/clientMessageId` payload를 멱등 재발행한다.
 
-README용 container diagram은 `docs/assets/architecture/overall-architecture.drawio`를 편집 원본으로 관리하고, GitHub에서 바로 보이는 export 결과는 `docs/assets/architecture/overall-architecture.svg`로 둔다. 상세 흐름은 README가 아니라 아래 sequence diagram에서 분리해 설명한다.
+README는 실제 React 클라이언트 화면과 사용자가 보는 상태 전이를 먼저 보여준다. 모든 기술을 한 장에 넣은
+container diagram은 사용하지 않으며, 저장 전후와 재연결 경계는 `ARCHITECTURE.md`의 단계 표와 아래
+sequence diagram에서 분리해 설명한다.
 
 ### Message Send Sequence
 
