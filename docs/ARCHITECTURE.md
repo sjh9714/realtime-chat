@@ -1,43 +1,102 @@
 # Realtime Chat Architecture
 
-이 문서는 README의 전체 아키텍처 다이어그램을 보조하는 설명입니다. 목적은 구현된 핵심 흐름과 검증 대상 경계를 빠르게 읽히게 하는 것이며, 운영 배포 토폴로지나 production SLO를 주장하지 않습니다.
+이 문서는 서버와 저장소를 한 장에 모두 나열하지 않습니다. 사용자가 체감하는 메시지 생명주기와 실패 복구
+경계만 순서대로 설명합니다.
 
-## 전체 구조
+## 1. 메시지가 저장되기까지
 
-![Realtime Chat 전체 아키텍처](assets/architecture/overall-architecture.svg)
+| 단계 | 구성 요소 | 결과 | 클라이언트 상태 |
+| --- | --- | --- | --- |
+| 1. 작성 | React client | optimistic row와 clientMessageId 생성 | <code>SENDING</code> |
+| 2. 전송 | STOMP controller | JWT, room membership, payload 검증 | <code>SENDING</code> |
+| 3. 접수 | Kafka producer | roomId key publish callback 성공 | <code>ACCEPTED</code> |
+| 4. 저장 | Kafka consumer + PostgreSQL | message row와 unread 상태 commit | 아직 상대 broadcast 없음 |
+| 5. 전달 | Redis Pub/Sub | commit된 DB ID payload를 room topic으로 fan-out | receiver에 표시 |
+| 6. 확정 | user persisted queue | 발신자의 optimistic row를 DB ID로 교체 | <code>PERSISTED</code> |
+| 7. 완료 | Kafka acknowledgment | 저장과 필요한 publish가 끝난 record ACK | 변경 없음 |
 
-README와 이 문서에서는 [`overall-architecture.svg`](assets/architecture/overall-architecture.svg)를 기준으로 노출합니다.
-[`overall-architecture.drawio`](assets/architecture/overall-architecture.drawio)는 편집 참고 자산으로 보관합니다.
+<code>ACCEPTED</code>는 Kafka publish 성공이고, <code>PERSISTED</code>는 DB 저장 완료 또는 기존 idempotent
+row 확인입니다. 어느 상태도 모든 상대방의 수신 완료를 뜻하지 않습니다.
 
-## 핵심 흐름
+## 전환 전후
 
-| 단계 | 구성 요소 | 역할 | 검증 경계 |
-|---|---|---|---|
-| WebSocket 연결 | Client, WebSocket Endpoint | STOMP `CONNECT`, `SUBSCRIBE`, `SEND` 진입점 | 연결과 인증 경계 |
-| 구독/전송 인가 | STOMP Auth | JWT 인증과 room membership 검증 | 비멤버 구독 거부, 전송 전 room member 재검증 |
-| 메시지 발행 | Message Producer, Kafka Topic by roomId | `roomId` key로 Kafka `chat.messages`에 publish | ACK/NACK는 Kafka publish accepted/failed 기준 |
-| 메시지 저장 | Kafka Consumer, PostgreSQL Message / Room / Read State | consumer가 메시지를 저장하고 persisted 상태를 알림 | PostgreSQL row가 reconnect recovery truth |
-| 수신자 전달 | Kafka Consumer, Fan-out | broadcast path가 room topic으로 receiver delivery 수행 | receiver runner 관측은 시나리오 검증 경계 |
-| 재연결 보정 | Reconnect Sync API, PostgreSQL | `lastReceivedMessageId` 이후 메시지를 조회 | Redis Pub/Sub 누락 가능성 보정 |
-| 임시 상태 | Redis Presence | session TTL 기반 online 상태 | ephemeral state이며 복구 진실 소스가 아님 |
-| 캐시/제한 | Redis Cache / Rate Limit | room list cache와 global SEND fixed-window 제한 | cache hit rate는 추가 측정 예정 |
-| 장애 격리 | DLT | consumer 실패 메시지 격리와 manual replay 대상 | replay utility 검증, 운영 도구 claim 아님 |
+| 이전 구조 | 현재 구조 |
+| --- | --- |
+| persistence와 broadcast consumer가 독립적으로 event 처리 | 한 consumer가 저장 뒤 broadcast |
+| broadcast가 DB commit보다 먼저 끝날 수 있음 | commit된 payload만 room channel에 publish |
+| 저장 실패 뒤 상대 화면에 유령 메시지가 남을 수 있음 | 저장 실패 시 receiver publish에 도달하지 않음 |
+| broadcast 성공 여부와 Kafka ACK 경계가 분리됨 | Redis publish 실패 시 ACK를 보류하고 redelivery |
 
-## 설계 판단
+현재 구조는 receiver delivery를 durable store로 사용하지 않습니다. PostgreSQL message ID가 재연결과
+중복 제거의 기준입니다.
 
-| 판단 | 이유 | 주의할 점 |
-|---|---|---|
-| WebSocket 연결, Kafka publish, DB persisted, receiver delivery를 분리 | 클라이언트가 어떤 단계까지 성공했는지 오해하지 않게 하기 위함 | ACK는 상대방 수신 완료가 아니라 Kafka publish 결과 |
-| Kafka key를 `roomId`로 사용 | 같은 room 메시지를 같은 partition 순서로 처리하기 위함 | 서로 다른 room 간 전역 순서는 보장하지 않음 |
-| PostgreSQL을 reconnect recovery truth로 둠 | Redis Pub/Sub는 best-effort이고 presence는 TTL 기반 임시 상태이기 때문 | 재연결 클라이언트는 sync API를 호출해야 함 |
-| Redis Presence를 ephemeral state로 취급 | 다중 세션 online/offline 판단은 빠른 TTL 상태가 적합하기 때문 | 메시지 복구나 delivery completeness의 진실 소스로 쓰지 않음 |
-| DLT를 별도 장애 격리 경계로 둠 | consumer 실패가 정상 메시지 흐름을 막지 않게 하기 위함 | production replay 운영 절차와 감사 로그는 별도 과제 |
+## 2. 재시도와 redelivery
 
-## Claim Boundary
+### 클라이언트 retry
 
-- `1,000 session send-to-receive latency | benchmark 미측정`
-- `1,000 session delivery completeness | benchmark 미측정`
-- `mixed traffic p95 latency | benchmark 미측정`
-- `mixed traffic cache hit rate는 추가 측정 예정`
+1. 클라이언트는 최초 전송에서 만든 clientMessageId를 유지합니다.
+2. 서버는 senderId와 clientMessageId로 기존 row를 찾습니다.
+3. 기존 row가 있으면 발신자에게 같은 DB ID의 PERSISTED를 다시 보냅니다.
+4. receiver room에는 같은 메시지를 다시 broadcast하지 않습니다.
 
-이 다이어그램은 구현된 핵심 흐름과 검증 대상 경계를 설명하기 위한 단순화된 구조도이며, 운영 배포 토폴로지나 production SLO를 주장하지 않습니다.
+### Kafka redelivery
+
+1. consumer가 messageKey로 기존 DB row를 확인합니다.
+2. 이미 commit된 unread·cache 부수 효과를 반복하지 않습니다.
+3. 이전에 실패한 Redis fan-out을 다시 시도합니다.
+4. publish가 끝난 뒤 Kafka record를 ACK합니다.
+
+이 두 중복 경계는 다릅니다. clientMessageId는 사용자의 재전송을, messageKey는 Kafka record의 재전달을
+구분합니다.
+
+## 3. 오프라인과 재연결
+
+Redis Pub/Sub는 online fan-out이고, Redis Presence는 session TTL 기반 임시 상태입니다. 둘 다 누락
+메시지를 복구하는 진실 소스가 아닙니다.
+
+| 단계 | 클라이언트 | 서버 |
+| --- | --- | --- |
+| 1. 연결 끊김 | 마지막 persisted DB ID 보존 | 메시지를 계속 PostgreSQL에 저장 |
+| 2. 재연결 | room topic을 다시 구독 | JWT와 room membership 재검증 |
+| 3. sync | afterMessageId를 전송 | 이후 메시지를 ID 오름차순으로 반환 |
+| 4. pagination | 마지막 응답 ID를 다음 cursor로 사용 | limit을 검증하고 hasMore 반환 |
+| 5. 병합 | live와 sync payload를 DB ID로 dedupe | 다른 room cursor와 비멤버 요청 거부 |
+
+## 4. 권한 경계
+
+| 진입점 | 검증 |
+| --- | --- |
+| STOMP CONNECT | JWT를 검증하고 principal에 userId 바인딩 |
+| STOMP SUBSCRIBE | room topic의 membership 확인 |
+| STOMP SEND | destination, payload, room membership 재검증 |
+| Message history / sync REST | 요청 사용자가 해당 room member인지 확인 |
+| Presence topic | room member만 접근 |
+
+인증된 사용자도 roomId를 추측해 다른 방을 읽거나 구독할 수 없습니다.
+
+## 5. ordering 범위
+
+Kafka publish key는 roomId입니다. 같은 방의 메시지는 같은 partition에서 offset 순서를 따르지만, 서로 다른
+방 사이의 전역 순서는 정의하지 않습니다. 클라이언트는 DB message ID를 sync cursor와 dedupe key로
+사용하며, 이를 wall-clock 전체 순서로 해석하지 않습니다.
+
+## 검증 연결
+
+- [두 app instance의 전달·retry·오프라인·장애 복구 E2E](../web/e2e/chat-flow.spec.ts)
+- [commit 뒤 publish와 Redis 실패](../src/test/java/com/realtime/chat/MessagePersistenceConsumerPublishTest.java)
+- [clientMessageId와 Kafka redelivery idempotency](../src/test/java/com/realtime/chat/MessagePersistenceServiceTest.java)
+- [DB persisted ACK](../src/test/java/com/realtime/chat/WebSocketPersistedAckIntegrationTest.java)
+- [reconnect sync API](../src/test/java/com/realtime/chat/MessageIntegrationTest.java)
+- [비멤버 SUBSCRIBE 차단](../src/test/java/com/realtime/chat/WebSocketSubscribeAuthorizationIntegrationTest.java)
+- [room partition ordering](../src/test/java/com/realtime/chat/MessageOrderingIntegrationTest.java)
+
+## Claim boundary
+
+- 현재 성능 주장: 없음.
+- historical unpinned archive의 수치는 현재 room-list와 persistence pipeline의 evidence가 아닙니다.
+- local E2E는 실패 순서와 복구 결과를 검증하며 production latency, delivery completeness, SLO를 보장하지
+  않습니다.
+- DLT와 runbook은 제한된 재현 utility이며 production 운영 체계를 의미하지 않습니다.
+
+측정 archive는 [PERF_RESULT.md](PERF_RESULT.md)와 [WEBSOCKET_MEASUREMENT.md](WEBSOCKET_MEASUREMENT.md),
+실행 명령과 근거는 [TESTING.md](TESTING.md)에 분리합니다.
