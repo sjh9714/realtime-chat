@@ -43,6 +43,19 @@ Spring Boot + React 채팅 프로젝트입니다.
 두 consumer의 완료 순서는 보장되지 않으므로, broadcast가 먼저 끝나면 Bob은 DB에 아직 없는 메시지를 볼 수
 있었습니다. 직후 저장이 실패하면 새로고침과 재연결에서 메시지가 사라집니다.
 
+![독립 broadcast-before-persist 구조와 persist-before-broadcast 구조 비교](docs/assets/architecture/persist-before-broadcast.png)
+
+편집 원본: [persist-before-broadcast.drawio](docs/assets/architecture/persist-before-broadcast.drawio)
+
+그림 transcript:
+
+1. 이전 구조와 현재 구조 모두 같은 Kafka event에서 시작합니다.
+2. 이전에는 broadcast와 persistence consumer가 독립적으로 실행되어 broadcast가 먼저 끝날 수
+   있었습니다.
+3. 상대 화면에 표시된 뒤 persistence가 실패하면 DB에는 메시지가 없어 재연결로 복구할 수 없습니다.
+4. 현재는 한 consumer가 DB commit을 끝낸 뒤 같은 DB ID로 broadcast하므로 sync API가 메시지를 다시
+   찾을 수 있습니다.
+
 이를 다음의 단일 consumer 경로로 바꿨습니다.
 
 | 단계 | 처리 | 사용자에게 보이는 의미 |

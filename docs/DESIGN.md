@@ -63,7 +63,9 @@ Reconnect
 
 README는 실제 React 클라이언트 화면과 사용자가 보는 상태 전이를 먼저 보여준다. 모든 기술을 한 장에 넣은
 container diagram은 사용하지 않으며, 저장 전후와 재연결 경계는 `ARCHITECTURE.md`의 단계 표와 아래
-sequence diagram에서 분리해 설명한다.
+sequence diagram에서 분리해 설명한다. 전환 전후 비교 그림은
+`docs/assets/architecture/persist-before-broadcast.drawio`를 편집 원본으로 관리하고 같은 경로의 2x PNG를
+README에 노출한다.
 
 ### Message Send Sequence
 

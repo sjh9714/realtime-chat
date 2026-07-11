@@ -3,6 +3,7 @@ package com.realtime.chat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 class DocumentationGuardTest {
 
   private static final Path README = Path.of("README.md");
+  private static final Path ARCHITECTURE_ASSETS = Path.of("docs", "assets", "architecture");
 
   @Test
   @DisplayName("README는 실제 제품 화면과 현재 메시지 생명주기 evidence 경계를 유지한다")
@@ -19,6 +21,9 @@ class DocumentationGuardTest {
 
     assertThat(readme)
         .contains("![실제 Realtime Chat Alice와 Bob 대화 화면]")
+        .contains("docs/assets/architecture/persist-before-broadcast.png")
+        .contains("docs/assets/architecture/persist-before-broadcast.drawio")
+        .contains("그림 transcript:")
         .contains("## 전환점: 저장되지 않은 메시지를 먼저 보여줄 수 있었다")
         .contains("## 오프라인과 재연결")
         .contains("## Redis publish 실패 뒤 복구")
@@ -33,5 +38,30 @@ class DocumentationGuardTest {
             "212.85ms -> 149.22ms",
             "expected 99,900",
             "1,000-user receiver matrix repeat3에서");
+  }
+
+  @Test
+  @DisplayName("메시지 생명주기 그림은 편집 원본과 2x PNG를 함께 유지한다")
+  void focusedDiagramKeepsEditableSourceAndTwoTimesExport() throws IOException {
+    Path drawio = ARCHITECTURE_ASSETS.resolve("persist-before-broadcast.drawio");
+    Path png = ARCHITECTURE_ASSETS.resolve("persist-before-broadcast.png");
+
+    assertThat(drawio).isRegularFile();
+    assertThat(png).isRegularFile();
+
+    byte[] pngBytes = Files.readAllBytes(png);
+    int width = ByteBuffer.wrap(pngBytes, 16, 8).getInt();
+    int height = ByteBuffer.wrap(pngBytes, 20, 4).getInt();
+    assertThat(width).isGreaterThanOrEqualTo(2400);
+    assertThat(height).isGreaterThanOrEqualTo(1000);
+
+    assertThat(Files.readString(drawio))
+        .contains(
+            "old-broadcast",
+            "old-visible",
+            "old-persist",
+            "new-persist",
+            "new-broadcast",
+            "new-visible");
   }
 }
