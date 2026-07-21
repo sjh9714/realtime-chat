@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420"
+  style="max-width:100%" role="img" aria-label="persist-before-broadcast 메시지 파이프라인: STOMP, Kafka, DB 커밋, Redis Pub/Sub, 2대 인스턴스 fan-out">
+  <rect width="880" height="420" rx="12" fill="#14161f"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a90a3"/>
+    </marker>
+  </defs>
+  <style>
+    .box{fill:#1d2029;stroke:#3a3f4f;stroke-width:1.5}
+    .t{fill:#e8e9ee;font:600 14px 'Pretendard',-apple-system,sans-serif}
+    .s{fill:#9aa0b0;font:11px 'Pretendard',-apple-system,sans-serif}
+    .m{fill:#9aa0b0;font:11px ui-monospace,Menlo,monospace}
+    .ln{stroke:#8a90a3;stroke-width:1.5;fill:none}
+  </style>
+  <text x="24" y="36" class="m">persist-before-broadcast — 커밋 전에는 브로드캐스트하지 않는다</text>
+
+  <rect x="24" y="64" width="130" height="56" rx="10" class="box"/>
+  <text x="89" y="88" text-anchor="middle" class="t">발신 클라이언트</text>
+  <text x="89" y="106" text-anchor="middle" class="s">clientMessageId 부여</text>
+
+  <rect x="206" y="64" width="160" height="56" rx="10" class="box"/>
+  <text x="286" y="88" text-anchor="middle" class="t">app-1 · STOMP</text>
+  <text x="286" y="106" text-anchor="middle" class="s">ACCEPTED 응답</text>
+
+  <rect x="418" y="64" width="120" height="56" rx="10" class="box"/>
+  <text x="478" y="88" text-anchor="middle" class="t">Kafka</text>
+  <text x="478" y="106" text-anchor="middle" class="s">파티션 6</text>
+
+  <rect x="600" y="64" width="170" height="56" rx="10" class="box"/>
+  <text x="685" y="88" text-anchor="middle" class="t">Consumer</text>
+  <text x="685" y="106" text-anchor="middle" class="s">messageKey 멱등성 체크</text>
+
+  <line x1="154" y1="92" x2="204" y2="92" class="ln" marker-end="url(#a)"/>
+  <line x1="366" y1="92" x2="416" y2="92" class="ln" marker-end="url(#a)"/>
+  <line x1="538" y1="92" x2="598" y2="92" class="ln" marker-end="url(#a)"/>
+
+  <rect x="600" y="180" width="170" height="56" rx="10" fill="#1d2029" stroke="#56c8e0" stroke-width="1.5"/>
+  <text x="685" y="204" text-anchor="middle" class="t">PostgreSQL 커밋</text>
+  <text x="685" y="222" text-anchor="middle" class="s">저장된 것만 사실이다</text>
+
+  <rect x="378" y="180" width="170" height="56" rx="10" class="box"/>
+  <text x="463" y="204" text-anchor="middle" class="t">Redis Pub/Sub</text>
+  <text x="463" y="222" text-anchor="middle" class="s">실패 시 Kafka 재전달 복구</text>
+
+  <line x1="685" y1="120" x2="685" y2="178" class="ln" marker-end="url(#a)"/>
+  <line x1="598" y1="208" x2="550" y2="208" class="ln" marker-end="url(#a)"/>
+  <text x="574" y="198" text-anchor="middle" class="s">커밋 후 발행</text>
+
+  <rect x="206" y="300" width="140" height="56" rx="10" class="box"/>
+  <text x="276" y="332" text-anchor="middle" class="t">app-1</text>
+  <rect x="388" y="300" width="140" height="56" rx="10" class="box"/>
+  <text x="458" y="332" text-anchor="middle" class="t">app-2</text>
+
+  <rect x="600" y="300" width="180" height="56" rx="10" fill="#1d2029" stroke="#56c8e0" stroke-width="1.5"/>
+  <text x="690" y="324" text-anchor="middle" class="t">수신자 999명</text>
+  <text x="690" y="342" text-anchor="middle" class="s">유실 0 · 중복 0 · 역전 0</text>
+
+  <line x1="440" y1="236" x2="300" y2="298" class="ln" marker-end="url(#a)"/>
+  <line x1="463" y1="236" x2="460" y2="298" class="ln" marker-end="url(#a)"/>
+  <line x1="346" y1="328" x2="380" y2="328" class="ln" stroke-dasharray="4 4"/>
+  <line x1="528" y1="328" x2="598" y2="328" class="ln" marker-end="url(#a)"/>
+
+  <text x="24" y="404" class="m">재연결: 마지막 수신 메시지 ID 이후를 DB에서 보충 조회 · 1,000명 × 3회 반복 검증</text>
+</svg>
