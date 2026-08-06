@@ -5,10 +5,25 @@ import { useAuthStore } from '../stores/auth-store';
 import { useChatStore } from '../stores/chat-store';
 import { useChatSocket } from '../hooks/use-chat-socket';
 import { Conversation } from './Conversation';
+import { CommandPalette } from './CommandPalette';
 import { RoomSidebar } from './RoomSidebar';
 
 export function ChatShell() {
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // ⌘K / Ctrl+K. 입력창에 있을 때도 열려야 한다 — 방을 바꾸려고 손을 떼는 일이 없어야 하는 게
+  // 이 기능의 요점이다.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const queryClient = useQueryClient();
   const session = useAuthStore((state) => state.session)!;
   const logout = useAuthStore((state) => state.logout);
@@ -44,7 +59,14 @@ export function ChatShell() {
   }
 
   return (
-    <ConnectedChatShell
+    <>
+      <CommandPalette
+        open={paletteOpen}
+        rooms={rooms.data ?? []}
+        onSelectRoom={selectRoom}
+        onClose={() => setPaletteOpen(false)}
+      />
+      <ConnectedChatShell
       token={session.token}
       currentUser={me.data}
       rooms={rooms.data ?? []}
@@ -55,12 +77,13 @@ export function ChatShell() {
       connectionNotice={connectionNotice}
       mobileRoomsOpen={mobileRoomsOpen}
       setMobileRoomsOpen={setMobileRoomsOpen}
-      onLogout={() => {
-        clearChat();
-        queryClient.clear();
-        logout();
-      }}
-    />
+        onLogout={() => {
+          clearChat();
+          queryClient.clear();
+          logout();
+        }}
+      />
+    </>
   );
 }
 
