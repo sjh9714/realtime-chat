@@ -168,7 +168,7 @@ a:focus-visible {
   bottom: -26vw;
   width: min(62vw, 760px);
   aspect-ratio: 1;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid var(--line-firm);
   border-radius: 50%;
   content: "";
 }
@@ -209,7 +209,7 @@ a:focus-visible {
   margin: 48px 0 0;
   grid-template-columns: repeat(3, 1fr);
   list-style: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.35);
+  border-top: 1px solid var(--line-firm);
 }
 
 .delivery-sequence li {
@@ -694,7 +694,9 @@ button:disabled {
   align-items: center;
   grid-template-columns: minmax(0, 1fr) auto;
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.92);
+  /* 예전 밝은 테마의 유리 효과가 남아 있었다. 어두운 배경 위에 흰색 92%를 얹으면
+     #ebebeb이 되고 그 위의 밝은 글자가 1.12:1이 된다. axe가 잡았다. */
+  background: var(--surface);
 }
 
 .conversation-header h1 {
