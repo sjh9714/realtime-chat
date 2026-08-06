@@ -317,6 +317,34 @@ persisted message id 또는 Kafka offset 기반 검증이 필요합니다.
 23-38ms입니다. 다만 이 결과도 local Docker Compose 반복 실행이므로 mixed traffic latency, production
 performance claim으로 확장하지 않습니다.
 
+### 5-2-1-a. 2026-08-07 재측정 (현재 커밋 `18e7189`)
+
+프론트 재작성과 Kafka 볼륨 수정 이후 같은 시나리오를 현재 커밋에서 다시 측정했습니다.
+스택은 `docker-compose.demo.yml + docker-compose.e2e.yml`(app-1, app-2, nginx 게이트웨이),
+접속은 노드를 지정해 절반씩 나눴습니다(`/ws/app-1`, `/ws/app-2`).
+
+| run | accepted | persisted | statusless | expected | unique | missing | duplicate | completeness | p50 | p95 | p99 | max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 100 | 100 | 0 | 4,900 | 4,900 | 0 | 0 | 100% | 25ms | 37ms | 40ms | 116ms |
+| 2 | 100 | 100 | 0 | 4,900 | 4,900 | 0 | 0 | 100% | 24ms | 37ms | 61ms | 66ms |
+| 3 | 100 | 100 | 0 | 4,900 | 4,900 | 0 | 0 | 100% | 24ms | 42ms | 55ms | 59ms |
+
+sender-local 순서 위반 0건, room-global 순서 위반 0건. `unexpectedDeliveries` 0건.
+`scripts/validate-delivery-evidence.mjs`가 세 run 모두 통과했습니다.
+
+요약 JSON은
+[`docs/evidence/receiver-matrix-50users-repeat3-20260807-summary.json`](evidence/receiver-matrix-50users-repeat3-20260807-summary.json)에
+보존했습니다.
+
+2026-05-22 실행과 비교하면 완전성은 동일하게 100%이고 p95는 23-38ms → 37-42ms입니다.
+같은 기계가 아니고 Docker Desktop 상태도 다르므로 **이 차이를 성능 변화로 읽지 않습니다.**
+
+**측정 장벽에 대해.** `--require-room-receipts true`로 먼저 시도했다가 세 번 모두
+`Timed out waiting for required SUBSCRIBE receipts`로 실패했습니다. Spring simple broker가
+`receipt` 헤더에 응답하지 않기 때문이며, §5 본문이 이미 적어 둔 성질입니다
+(receipt는 진단값, 기본 장벽은 CONNECTED 확인 + settle). 문서의 기본 장벽으로 측정했습니다.
+이 옵션은 디버깅용이지 측정 조건이 아닙니다.
+
 ### 5-2-2. 500-user local receiver repeat3
 
 2026-05-22에 같은 Docker Compose app-1/app-2 환경에서 단일 방 500명 receiver matrix를 3회 반복했습니다.

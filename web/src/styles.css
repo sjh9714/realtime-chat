@@ -1,22 +1,59 @@
+/*
+ * 값의 기준은 DESIGN.md다. 여기 없는 색·크기를 화면에서 즉석으로 만들지 않는다.
+ *
+ * 채팅은 오래 켜 두는 화면이다. 몇 초 보고 닫는 게 아니라 하루 종일 옆에 둔다.
+ * 그래서 어둡고 조용해야 하고, 조밀하되 눈이 아프지 않아야 한다.
+ *
+ * Linear 실측(2026-08-07): 배경 rgb(8,9,10), 글자 #f7f8f8, 회색 계단 네 단계,
+ * 제목 weight 510 자간 -1.4px, 모서리 2~6px, 액센트는 아주 적게.
+ * 핵심은 **굵기가 아니라 색이 위계를 만든다**는 것이다.
+ */
 :root {
-  font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #172033;
-  background: #f5f7fb;
+  font-family: Pretendard, "Pretendard Variable", Inter, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  color: #f7f8f8;
+  background: #08090a;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --canvas: #f5f7fb;
-  --surface: #ffffff;
-  --surface-muted: #eef2f8;
-  --ink: #172033;
-  --muted: #566274;
-  --line: #dce2ec;
-  --line-strong: #c5cfdd;
-  --accent: #315fca;
-  --accent-strong: #244ba6;
-  --accent-soft: #e8efff;
-  --success: #237451;
-  --danger: #b13b45;
-  --warning: #9a6518;
+
+  --bg: #08090a;
+  --surface: #0e1011;
+  --raised: #16181a;
+
+  /* 선이 아니라 아주 옅은 면. 어두운 화면에서 1px 실선은 너무 세다. */
+  --line: rgba(255, 255, 255, 0.07);
+  --line-firm: rgba(255, 255, 255, 0.13);
+
+  /* 위계는 이 네 단계가 만든다. weight는 450~550에서 벗어나지 않는다. */
+  --text: #f7f8f8;
+  --text-2: #d0d6e0;
+  --text-3: #8a8f98;
+  /*
+   * 가장 흐린 글자. 처음엔 Linear에서 본 #62666d를 그대로 썼는데 재보니 --bg 위에서
+   * 3.45:1이었다 — 눈으로 "충분히 보인다"고 판단했지 계산하지 않았던 것이다.
+   * 세 면(bg · surface · 네이비 패널) 모두에서 4.5:1을 넘는 가장 어두운 값으로 올렸다.
+   * bg 5.31 · surface 5.08 · navy 4.80.
+   */
+  --text-4: #80848c;
+
+  --accent: #7c8cff;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+
+  --radius: 6px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* 기존 이름을 쓰는 곳이 많아 잇는다. 새 코드에서는 위의 이름을 쓴다. */
+  --canvas: var(--bg);
+  --surface-muted: var(--raised);
+  --ink: var(--text);
+  --muted: var(--text-3);
+  --line-strong: var(--line-firm);
+  --accent-strong: #6b7bff;
+  --accent-soft: rgba(124, 140, 255, 0.14);
+  --success: var(--ok);
+  --warning: var(--warn);
 }
 
 * {
@@ -72,7 +109,7 @@ a:focus-visible {
   top: 8px;
   left: 8px;
   padding: 10px 14px;
-  color: white;
+  color: var(--bg);
   background: var(--accent-strong);
   transform: translateY(-150%);
 }
@@ -116,8 +153,13 @@ a:focus-visible {
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
-  color: white;
-  background: #173a83;
+  /*
+   * 이 면은 밝은 테마의 잔재였다(중간 파랑). 회색 계단은 --bg 위에서 대비를 맞춰 둔 값이라
+   * 그보다 밝은 면 위에서는 --text-3가 3.34:1로 떨어졌다. 면을 어두운 쪽으로 내려
+   * 앱 전체가 같은 계단 위에 서게 했다 — 파란 정체성은 남기되 명도만 맞춘다.
+   */
+  color: var(--text);
+  background: #0f1629;
 }
 
 .auth-intro::after {
@@ -126,7 +168,7 @@ a:focus-visible {
   bottom: -26vw;
   width: min(62vw, 760px);
   aspect-ratio: 1;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid var(--line-firm);
   border-radius: 50%;
   content: "";
 }
@@ -139,7 +181,7 @@ a:focus-visible {
 }
 
 .auth-copy .eyebrow {
-  color: #b8ccff;
+  color: var(--text-2);
 }
 
 .auth-copy h1 {
@@ -153,7 +195,7 @@ a:focus-visible {
 .auth-copy > p:last-child {
   max-width: 54ch;
   margin: 28px 0 0;
-  color: #d9e3fa;
+  color: var(--text-2);
   font-size: clamp(1rem, 1.4vw, 1.18rem);
   line-height: 1.7;
 }
@@ -167,21 +209,21 @@ a:focus-visible {
   margin: 48px 0 0;
   grid-template-columns: repeat(3, 1fr);
   list-style: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.35);
+  border-top: 1px solid var(--line-firm);
 }
 
 .delivery-sequence li {
   display: grid;
   padding: 18px 18px 0 0;
   gap: 22px;
-  color: #f3f6ff;
+  color: var(--text);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
 .delivery-sequence span {
-  color: #a9c1fb;
+  color: var(--text-3);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -225,7 +267,7 @@ a:focus-visible {
 .user-search label {
   display: grid;
   gap: 8px;
-  color: #364157;
+  color: var(--text-2);
   font-size: 0.83rem;
   font-weight: 720;
 }
@@ -245,7 +287,7 @@ a:focus-visible {
   min-height: 52px;
   border: 0;
   border-radius: 4px;
-  color: white;
+  color: var(--bg);
   background: var(--accent);
   font-weight: 780;
   cursor: pointer;
@@ -267,7 +309,7 @@ a:focus-visible {
 
 .demo-action:hover:not(:disabled) {
   border-color: var(--accent);
-  background: #f4f7ff;
+  background: var(--raised);
 }
 
 button:disabled {
@@ -346,7 +388,7 @@ button:disabled {
   padding: 6px;
   border: 1px solid var(--line-strong);
   background: var(--surface);
-  box-shadow: 0 14px 30px rgba(36, 48, 72, 0.12);
+  border: 1px solid var(--line);
 }
 
 .search-results > p {
@@ -421,7 +463,7 @@ button:disabled {
 }
 
 .room-list > button:hover {
-  background: #f8f9fc;
+  background: var(--surface);
 }
 
 .room-list > button[aria-current="page"] {
@@ -439,8 +481,8 @@ button:disabled {
   height: 40px;
   border-radius: 50%;
   place-items: center;
-  color: #24417f;
-  background: #dfe8fb;
+  color: var(--accent);
+  background: var(--accent-soft);
   font-weight: 800;
 }
 
@@ -464,7 +506,7 @@ button:disabled {
 }
 
 .room-title-row time {
-  color: #566274;
+  color: var(--text-3);
   font-size: 0.67rem;
 }
 
@@ -483,9 +525,9 @@ button:disabled {
   min-width: 22px;
   height: 22px;
   padding: 0 6px;
-  border-radius: 11px;
+  border-radius: var(--radius);
   place-items: center;
-  color: white;
+  color: var(--bg);
   background: var(--accent);
   font-size: 0.67rem;
   font-weight: 800;
@@ -503,6 +545,7 @@ button:disabled {
   display: grid;
   min-width: 0;
   min-height: 0;
+  /* 상단 바 · 알림 자리 · 대화. 알림 자리는 비어 있으면 0이 된다(ChatShell 참고) */
   grid-template-rows: 48px auto minmax(0, 1fr);
 }
 
@@ -515,7 +558,10 @@ button:disabled {
   justify-content: flex-end;
   gap: 20px;
   border-bottom: 1px solid var(--line);
-  background: rgba(245, 247, 251, 0.96);
+  /* 스크롤이 뒤로 지나가므로 반투명이되, 어두운 쪽이어야 한다.
+     밝은 rgba가 남아 있어 대비 1.09:1이었다 — hex만 훑고 rgba를 놓쳤다. */
+  background: rgba(14, 16, 17, 0.92);
+  backdrop-filter: blur(8px);
 }
 
 .utility-bar p {
@@ -543,7 +589,7 @@ button:disabled {
   display: flex;
   min-height: 36px;
   align-items: center;
-  color: #334158;
+  color: var(--text-2);
   font-size: 0.76rem;
   font-weight: 750;
   cursor: pointer;
@@ -605,7 +651,7 @@ button:disabled {
 }
 
 .correctness-panel strong {
-  color: #26354d;
+  color: var(--text-2);
   font-size: 0.8rem;
 }
 
@@ -616,7 +662,7 @@ button:disabled {
 }
 
 .correctness-panel code {
-  color: #294f9e;
+  color: var(--accent);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.72rem;
 }
@@ -624,15 +670,15 @@ button:disabled {
 .connection-notice {
   padding: 8px 24px;
   margin: 0;
-  color: #23447d;
-  background: #e8efff;
+  color: var(--accent);
+  background: var(--accent-soft);
   font-size: 0.78rem;
   text-align: center;
 }
 
 .notice-error {
-  color: #7f2831;
-  background: #fbeaec;
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.10);
 }
 
 .conversation {
@@ -649,7 +695,9 @@ button:disabled {
   align-items: center;
   grid-template-columns: minmax(0, 1fr) auto;
   border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.92);
+  /* 예전 밝은 테마의 유리 효과가 남아 있었다. 어두운 배경 위에 흰색 92%를 얹으면
+     #ebebeb이 되고 그 위의 밝은 글자가 1.12:1이 된다. axe가 잡았다. */
+  background: var(--surface);
 }
 
 .conversation-header h1 {
@@ -671,7 +719,7 @@ button:disabled {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #8994a6;
+  background: var(--text-4);
 }
 
 .connection-online {
@@ -754,7 +802,7 @@ button:disabled {
 
 .message-sender {
   margin: 0 0 6px;
-  color: #4d596d;
+  color: var(--text-3);
   font-size: 0.74rem;
   font-weight: 730;
 }
@@ -762,21 +810,22 @@ button:disabled {
 .message-bubble {
   padding: 11px 14px;
   border: 1px solid var(--line);
-  border-radius: 5px 5px 5px 1px;
+  border-radius: var(--radius) var(--radius) var(--radius) 2px;
   background: var(--surface);
 }
 
 .message-mine .message-bubble {
-  border-color: #315fca;
-  border-radius: 5px 5px 1px 5px;
-  color: white;
+  border-color: var(--accent);
+  border-radius: var(--radius) var(--radius) 2px var(--radius);
+  color: var(--bg);
   background: var(--accent);
 }
 
 .message-row[data-status="FAILED"] .message-bubble {
-  border-color: #d99ca2;
-  color: #772831;
-  background: #fff5f6;
+  /* 다크에서 밝은 분홍 면은 눈을 때린다. 테두리와 글자로만 말한다. */
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.08);
 }
 
 .message-bubble p {
@@ -793,31 +842,45 @@ button:disabled {
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
-  color: #566274;
+  color: var(--text-3);
   font-size: 0.66rem;
 }
 
 .message-meta button {
   min-height: 28px;
   padding: 0 8px;
-  border: 1px solid #d99ca2;
+  border: 1px solid var(--danger);
   border-radius: 3px;
-  color: #8f3039;
+  color: var(--danger);
   background: white;
   cursor: pointer;
 }
 
+/* 색만으로 상태를 말하지 않는다. 점과 글자를 함께 둔다. */
 .delivery-badge {
-  font-weight: 750;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.delivery-badge i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
 }
 
 .delivery-sending,
 .delivery-accepted {
-  color: var(--warning);
+  color: var(--warn);
 }
 
 .delivery-persisted {
-  color: var(--success);
+  color: var(--ok);
 }
 
 .delivery-failed {
@@ -860,7 +923,7 @@ button:disabled {
 
 .composer-actions span {
   padding-bottom: 11px;
-  color: #566274;
+  color: var(--text-3);
   font-size: 0.65rem;
 }
 
@@ -869,7 +932,7 @@ button:disabled {
   min-height: 50px;
   border: 0;
   border-radius: 4px;
-  color: white;
+  color: var(--bg);
   background: var(--accent);
   font-weight: 760;
   cursor: pointer;
@@ -1041,4 +1104,105 @@ button:disabled {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ── 명령 팔레트 (DESIGN.md) ────────────────────────────────
+   방 이동을 키보드로. 어두운 화면이라 그림자 대신 배경 한 단계와 옅은 테두리로 띄운다. */
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: start center;
+  padding-top: 14vh;
+  background: rgba(8, 9, 10, 0.72);
+}
+
+.palette {
+  width: min(560px, calc(100vw - 32px));
+  background: var(--raised);
+  border: 1px solid var(--line-firm);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.palette-input::placeholder { color: var(--text-4); }
+.palette-input:focus { outline: none; }
+
+.palette-results {
+  max-height: 320px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 키보드 선택과 마우스 hover가 같은 표시를 쓴다. 둘이 다르면 지금 무엇이 선택됐는지
+   헷갈린다 — 그래서 hover에서도 active를 옮긴다(onMouseEnter). */
+.palette-item.is-active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.palette-item em {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.palette-empty {
+  padding: 18px 10px;
+  color: var(--text-4);
+  font-size: 13px;
+  text-align: center;
+}
+
+.palette-hint {
+  margin: 0;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--text-4);
+  font-size: 11px;
+}
+
+.palette-hint kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--line-firm);
+  border-radius: 3px;
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 11px;
 }
