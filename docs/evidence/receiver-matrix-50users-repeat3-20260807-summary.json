@@ -1,0 +1,169 @@
+{
+  "scenario": "50-user local receiver matrix, repeat 3",
+  "measuredAt": "2026-08-07",
+  "commit": "18e718944f039a10127143fa7affcdabbc767e24",
+  "claimBoundary": "local Docker Compose 2-node scenario evidence. 공개 성능 benchmark나 운영 성능 claim이 아니다.",
+  "environment": {
+    "stack": "docker-compose.demo.yml + docker-compose.e2e.yml (app-1, app-2, nginx gateway)",
+    "host": "Apple Silicon macOS, Docker Desktop",
+    "gateway": "localhost:18080",
+    "wsUrls": [
+      "ws://localhost:18080/ws/app-1",
+      "ws://localhost:18080/ws/app-2"
+    ]
+  },
+  "barrier": "CONNECTED 확인 + 250ms settle (문서 기본값). SUBSCRIBE receipt 장벽은 쓰지 않았다 — Spring simple broker가 receipt를 돌려주지 않는다.",
+  "validator": "scripts/validate-delivery-evidence.mjs — 3개 run 모두 통과",
+  "runs": [
+    {
+      "run": 1,
+      "options": {
+        "baseUrl": "http://localhost:18080",
+        "wsUrls": [
+          "ws://localhost:18080/ws/app-1",
+          "ws://localhost:18080/ws/app-2"
+        ],
+        "users": 50,
+        "rooms": 1,
+        "usersPerRoom": 50,
+        "messagesPerUser": 50,
+        "senders": 2,
+        "sendersPerRoom": 2,
+        "sendIntervalMs": 125,
+        "drainMs": 5000,
+        "subscribeReceiptTimeoutMs": 5000,
+        "statusSubscribeSettleMs": 250,
+        "requireRoomReceipts": false,
+        "requireStatusReceipts": false,
+        "mixedHttpProbes": false,
+        "httpProbeUsersPerRoom": 1
+      },
+      "sendStatus": {
+        "totalSends": 100,
+        "statusesObserved": 5200,
+        "acceptedSends": 100,
+        "persistedSends": 100,
+        "failedSends": 0,
+        "rateLimitedSends": 0,
+        "statuslessSends": 0,
+        "stompErrorsWithoutClientMessageId": 0
+      },
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 25,
+        "p90": 33,
+        "p95": 37,
+        "p99": 40,
+        "max": 116
+      },
+      "senderLocalOutOfOrderCount": 0,
+      "roomGlobalOutOfOrderCount": 0
+    },
+    {
+      "run": 2,
+      "options": {
+        "baseUrl": "http://localhost:18080",
+        "wsUrls": [
+          "ws://localhost:18080/ws/app-1",
+          "ws://localhost:18080/ws/app-2"
+        ],
+        "users": 50,
+        "rooms": 1,
+        "usersPerRoom": 50,
+        "messagesPerUser": 50,
+        "senders": 2,
+        "sendersPerRoom": 2,
+        "sendIntervalMs": 125,
+        "drainMs": 5000,
+        "subscribeReceiptTimeoutMs": 5000,
+        "statusSubscribeSettleMs": 250,
+        "requireRoomReceipts": false,
+        "requireStatusReceipts": false,
+        "mixedHttpProbes": false,
+        "httpProbeUsersPerRoom": 1
+      },
+      "sendStatus": {
+        "totalSends": 100,
+        "statusesObserved": 5200,
+        "acceptedSends": 100,
+        "persistedSends": 100,
+        "failedSends": 0,
+        "rateLimitedSends": 0,
+        "statuslessSends": 0,
+        "stompErrorsWithoutClientMessageId": 0
+      },
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 24,
+        "p90": 34,
+        "p95": 37,
+        "p99": 61,
+        "max": 66
+      },
+      "senderLocalOutOfOrderCount": 0,
+      "roomGlobalOutOfOrderCount": 0
+    },
+    {
+      "run": 3,
+      "options": {
+        "baseUrl": "http://localhost:18080",
+        "wsUrls": [
+          "ws://localhost:18080/ws/app-1",
+          "ws://localhost:18080/ws/app-2"
+        ],
+        "users": 50,
+        "rooms": 1,
+        "usersPerRoom": 50,
+        "messagesPerUser": 50,
+        "senders": 2,
+        "sendersPerRoom": 2,
+        "sendIntervalMs": 125,
+        "drainMs": 5000,
+        "subscribeReceiptTimeoutMs": 5000,
+        "statusSubscribeSettleMs": 250,
+        "requireRoomReceipts": false,
+        "requireStatusReceipts": false,
+        "mixedHttpProbes": false,
+        "httpProbeUsersPerRoom": 1
+      },
+      "sendStatus": {
+        "totalSends": 100,
+        "statusesObserved": 5200,
+        "acceptedSends": 100,
+        "persistedSends": 100,
+        "failedSends": 0,
+        "rateLimitedSends": 0,
+        "statuslessSends": 0,
+        "stompErrorsWithoutClientMessageId": 0
+      },
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "completenessPercent": 100,
+      "latencyMs": {
+        "count": 4900,
+        "p50": 24,
+        "p90": 36,
+        "p95": 42,
+        "p99": 55,
+        "max": 59
+      },
+      "senderLocalOutOfOrderCount": 0,
+      "roomGlobalOutOfOrderCount": 0
+    }
+  ]
+}
