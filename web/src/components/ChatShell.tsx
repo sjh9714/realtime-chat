@@ -161,10 +161,20 @@ function ConnectedChatShell({
           </details>
           <button type="button" onClick={onLogout}>로그아웃</button>
         </div>
-        {connectionNotice && (
-          <p className="connection-notice" role="status">{connectionNotice}</p>
-        )}
-        {roomsError && <p className="connection-notice notice-error" role="alert">{roomsError}</p>}
+        {/*
+          알림 자리는 비어 있어도 항상 둔다.
+
+          .workspace는 `48px auto minmax(0,1fr)` 3행 그리드다. 알림을 조건부로 그리면
+          알림이 없을 때 대화가 세 번째 행이 아니라 두 번째 행(auto)에 들어가 내용 높이로
+          줄어든다. 720px 화면에서 571px에서 끝나고 149px가 비어 있었다.
+          자리를 고정해 대화가 언제나 마지막 행을 차지하게 한다.
+        */}
+        <div className="notice-slot">
+          {connectionNotice && (
+            <p className="connection-notice" role="status">{connectionNotice}</p>
+          )}
+          {roomsError && <p className="connection-notice notice-error" role="alert">{roomsError}</p>}
+        </div>
         {selectedRoom ? (
           <Conversation
             token={token}
