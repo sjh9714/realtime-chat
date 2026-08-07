@@ -1,0 +1,98 @@
+{
+  "expectedDeliveries": 4900,
+  "actualUniqueDeliveries": 4900,
+  "missingDeliveries": 0,
+  "duplicateDeliveries": 0,
+  "unexpectedDeliveries": 0,
+  "senderLocalOutOfOrderCount": 0,
+  "roomGlobalOutOfOrderCount": 0,
+  "roomGlobalOrdering": {
+    "source": "persistedMessageId",
+    "comparableDeliveries": 4900,
+    "outOfOrderCount": 0
+  },
+  "completenessPercent": 100,
+  "sendStatus": {
+    "totalSends": 100,
+    "statusesObserved": 5200,
+    "acceptedSends": 100,
+    "persistedSends": 100,
+    "failedSends": 0,
+    "rateLimitedSends": 0,
+    "statuslessSends": 0,
+    "stompErrorsWithoutClientMessageId": 0
+  },
+  "acceptedDelivery": {
+    "expectedDeliveries": 4900,
+    "actualUniqueDeliveries": 4900,
+    "missingDeliveries": 0,
+    "completenessPercent": 100
+  },
+  "persistedDelivery": {
+    "expectedDeliveries": 4900,
+    "actualUniqueDeliveries": 4900,
+    "missingDeliveries": 0,
+    "completenessPercent": 100
+  },
+  "latencyMs": {
+    "count": 4900,
+    "p50": 27,
+    "p90": 36,
+    "p95": 41,
+    "p99": 44,
+    "max": 58
+  },
+  "byRoom": {
+    "14": {
+      "expectedDeliveries": 4900,
+      "actualUniqueDeliveries": 4900,
+      "missingDeliveries": 0,
+      "duplicateDeliveries": 0,
+      "unexpectedDeliveries": 0,
+      "senderLocalOutOfOrderCount": 0,
+      "roomGlobalOutOfOrderCount": 0,
+      "roomGlobalOrdering": {
+        "source": "persistedMessageId",
+        "comparableDeliveries": 4900,
+        "outOfOrderCount": 0
+      },
+      "completenessPercent": 100,
+      "sendStatus": {
+        "totalSends": 100,
+        "statusesObserved": 5200,
+        "acceptedSends": 100,
+        "persistedSends": 100,
+        "failedSends": 0,
+        "rateLimitedSends": 0,
+        "statuslessSends": 0,
+        "stompErrorsWithoutClientMessageId": 0
+      },
+      "acceptedDelivery": {
+        "expectedDeliveries": 4900,
+        "actualUniqueDeliveries": 4900,
+        "missingDeliveries": 0,
+        "completenessPercent": 100
+      },
+      "persistedDelivery": {
+        "expectedDeliveries": 4900,
+        "actualUniqueDeliveries": 4900,
+        "missingDeliveries": 0,
+        "completenessPercent": 100
+      },
+      "latencyMs": {
+        "count": 4900,
+        "p50": 27,
+        "p90": 36,
+        "p95": 41,
+        "p99": 44,
+        "max": 58
+      }
+    }
+  },
+  "mixedHttp": {
+    "totalRequests": 0,
+    "okRequests": 0,
+    "failedRequests": 0,
+    "byOperation": {}
+  }
+}
