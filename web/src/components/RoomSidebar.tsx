@@ -11,12 +11,24 @@ interface RoomSidebarProps {
   onCloseMobile: () => void;
 }
 
+/**
+ * 대화 목록의 시각.
+ *
+ * 시각만 찍으면 어제 온 메시지와 오늘 온 메시지가 똑같이 "오전 09:14"로 보인다.
+ * 며칠치 대화가 쌓인 목록에서는 며칠 전 것인지가 시·분보다 먼저 필요하다.
+ */
 function roomTime(room: Room) {
   const value = room.lastMessageAt ?? room.createdAt;
-  return new Intl.DateTimeFormat('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value));
+  const at = new Date(value);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const daysAgo = Math.floor((startOfToday.getTime() - at.getTime()) / 86_400_000) + 1;
+
+  if (daysAgo <= 0) {
+    return new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(at);
+  }
+  if (daysAgo === 1) return '어제';
+  return new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric' }).format(at);
 }
 
 export function RoomSidebar({
