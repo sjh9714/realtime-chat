@@ -384,7 +384,13 @@ test('둘러보기로 연 두 창은 서로 다른 사람이고 메시지가 실
   await sender.page.getByPlaceholder('메시지를 입력하세요').fill(text);
   await sender.page.keyboard.press('Enter');
 
-  await expect(receiver.page.getByText(text)).toBeVisible({ timeout: 15_000 });
+  /*
+   * 대화 안으로 범위를 좁힌다. 보낸 글은 사이드바의 '마지막 메시지'에도 뜨기 때문에
+   * 화면 전체에서 찾으면 두 곳에 걸린다.
+   */
+  await expect(
+    receiver.page.locator('.message-timeline').getByText(text),
+  ).toBeVisible({ timeout: 15_000 });
   // 보낸 쪽은 DB에 남은 뒤에야 '전달 완료'가 된다
   await expect(sender.page.locator('.message-row').last()).toContainText('전달 완료');
 });
@@ -408,4 +414,44 @@ test('그룹 대화에는 초대 링크가 있고 1:1에는 없다', async ({ pa
       await expect(page.getByRole('button', { name: '초대 링크 복사' })).toHaveCount(0);
     }
   }
+});
+
+/*
+ * 안내봇.
+ *
+ * 혼자 창 하나만 연 사람에게도 무언가 일어나야 한다는 게 이 기능의 이유다.
+ * 동시에 **아무 말에나 답하면 안 된다** — 방문자가 떠난 뒤에도 데모 데이터가 불어난다.
+ */
+test('안내봇은 부를 때만 답하고 BOT으로 표시된다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '가입하지 않고 둘러보기' }).click();
+  await expect(page.locator('.utility-bar strong')).not.toBeEmpty();
+  await page.getByRole('button', { name: /제품팀 스탠드업/ }).click();
+  await page.locator('.message-row').first().waitFor();
+
+  // 사람인 척하지 않는다 — 시드에 남은 봇 공지에 배지가 있다
+  await expect(page.locator('.message-sender', { has: page.locator('.bot-badge') }).first())
+    .toContainText('안내봇');
+
+  // 평범한 말에는 끼어들지 않는다
+  const before = await page.locator('.message-row').count();
+  await page.getByPlaceholder('메시지를 입력하세요').fill('오늘 날씨 좋네요');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.message-row')).toHaveCount(before + 1);
+  await page.waitForTimeout(4_000);
+  expect(await page.locator('.message-row').count()).toBe(before + 1);
+
+  // 부르면 답한다
+  await page.getByPlaceholder('메시지를 입력하세요').fill('/도움');
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('/상태 — 지금 이 방의 참여자와 연결 상태')).toBeVisible({
+    timeout: 15_000,
+  });
+
+  /*
+   * 인스턴스가 2대라 여기가 제일 틀리기 쉽다. 저장 컨슈머와 다른 그룹으로 붙였으니
+   * 한 대만 처리해야 한다 — 답이 하나여야 한다.
+   */
+  await page.waitForTimeout(4_000);
+  expect(await page.locator('.message-row').count()).toBe(before + 3);
 });

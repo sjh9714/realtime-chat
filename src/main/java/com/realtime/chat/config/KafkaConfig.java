@@ -102,6 +102,21 @@ public class KafkaConfig {
     return createListenerFactory("chat-persistence", kafkaTemplate, dltRoutedCounter);
   }
 
+  /*
+   * 안내봇용 Consumer.
+   *
+   * 저장 컨슈머에 끼워 넣지 않고 **자기 그룹으로 따로 붙는다.** 두 가지 이유다.
+   *  - 봇에서 예외가 나도 저장·브로드캐스트 경로가 흔들리지 않는다.
+   *    같은 리스너 안에 두면 봇의 실패가 Kafka 재전달을 부른다.
+   *  - 인스턴스가 2대여도 같은 그룹이라 한 대만 처리한다. 두 번 답하지 않는다.
+   */
+  @Bean
+  public ConcurrentKafkaListenerContainerFactory<String, Object> chatBotListenerFactory(
+      KafkaTemplate<String, Object> kafkaTemplate,
+      @Qualifier("dltRoutedCounter") Counter dltRoutedCounter) {
+    return createListenerFactory("chat-bot", kafkaTemplate, dltRoutedCounter);
+  }
+
   // 읽음 처리용 Consumer
   @Bean
   public ConcurrentKafkaListenerContainerFactory<String, Object> readReceiptListenerFactory(

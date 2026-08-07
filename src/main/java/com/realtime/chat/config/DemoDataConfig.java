@@ -1,5 +1,6 @@
 package com.realtime.chat.config;
 
+import com.realtime.chat.bot.ChatBotRules;
 import com.realtime.chat.domain.ChatRoom;
 import com.realtime.chat.domain.Message;
 import com.realtime.chat.domain.MessageType;
@@ -88,6 +89,16 @@ public class DemoDataConfig {
    */
   private static final List<String> EVERYONE = PERSONAS;
 
+  /**
+   * 그룹 방에는 안내봇도 들어간다.
+   *
+   * <p>봇은 {@link #PERSONAS}에 넣지 않는다 — 둘러보기가 내주는 것은 사람이어야 한다.
+   * 방문자가 봇으로 로그인되면 이상하다.
+   */
+  private static final List<String> EVERYONE_WITH_BOT =
+      java.util.stream.Stream.concat(PERSONAS.stream(), java.util.stream.Stream.of(ChatBotRules.BOT_EMAIL))
+          .toList();
+
   private static final List<Script> SCRIPTS = List.of(
       new Script(null, RoomType.DIRECT, List.of("jiwon@demo.local", "taeho@demo.local"), List.of(
           new Line(0, "내일 회의 자료 초안 올려뒀어요"),
@@ -113,7 +124,9 @@ public class DemoDataConfig {
           new Line(1, "그럼 열한 시로 잡을게요"),
           new Line(1, "삼십 분이면 충분할 것 같습니다"),
           new Line(0, "네 그때 봬요"))),
-      new Script("제품팀 스탠드업", RoomType.GROUP, EVERYONE, List.of(
+      new Script("제품팀 스탠드업", RoomType.GROUP, EVERYONE_WITH_BOT, List.of(
+          // 자리 6 = 안내봇. 정각 공지가 기록에 남아 있어야 "계속 돌고 있는 서비스"로 읽힌다
+          new Line(6, "스탠드업 시작 10분 전입니다. 오늘 할 일을 한 줄로 남겨 주세요."),
           new Line(0, "오늘 스탠드업 10분 뒤에 시작할게요"),
           new Line(1, "저는 어제 작업 이어서 합니다"),
           new Line(1, "오전에 끝날 것 같아요"),
@@ -125,8 +138,11 @@ public class DemoDataConfig {
           new Line(3, "저도 특이사항 없습니다"),
           new Line(0, "확인하고 코멘트 남길게요"),
           new Line(0, "다들 고생하셨습니다"),
-          new Line(5, "감사합니다"))),
-      new Script("배포 준비", RoomType.GROUP, EVERYONE, List.of(
+          new Line(5, "감사합니다"),
+          // 18:00 스케줄러가 보내는 것과 같은 문구. 기록에 남아 있어야 "계속 돌고 있다"로 읽힌다
+          new Line(6, "오늘 하루 수고하셨습니다. 넘길 일이 있으면 이 방에 남겨 주세요."))),
+      new Script("배포 준비", RoomType.GROUP, EVERYONE_WITH_BOT, List.of(
+          new Line(6, "오늘 배포 예정 건이 있습니다. 확인이 끝나면 이 방에 남겨 주세요."),
           new Line(3, "스테이징 올렸습니다"),
           new Line(3, "한 번씩 눌러 봐 주세요"),
           new Line(0, "확인했어요. 목록 화면만 다시 볼게요"),
@@ -136,8 +152,9 @@ public class DemoDataConfig {
           new Line(0, "둘 다 문제 없으면 오후에 넘길게요"),
           new Line(2, "네 그때 맞춰서 공지 준비할게요"),
           new Line(5, "확인했습니다"),
-          new Line(0, "고맙습니다"))),
-      new Script("디자인 리뷰", RoomType.GROUP, EVERYONE, List.of(
+          new Line(0, "고맙습니다"),
+          new Line(6, "확인 완료로 표시했습니다. 저를 부르려면 /도움 이라고 보내 주세요."))),
+      new Script("디자인 리뷰", RoomType.GROUP, EVERYONE_WITH_BOT, List.of(
           new Line(5, "시안 두 개 올렸습니다"),
           new Line(5, "A는 여백을 넉넉히, B는 정보를 더 담았어요"),
           new Line(2, "저는 B가 좋습니다"),
@@ -148,7 +165,7 @@ public class DemoDataConfig {
           new Line(5, "그럼 B로 가고 글자만 한 단계 키우겠습니다"),
           new Line(3, "좋습니다"),
           new Line(0, "정리 고맙습니다"))),
-      new Script("점심 뭐 먹지", RoomType.GROUP, EVERYONE, List.of(
+      new Script("점심 뭐 먹지", RoomType.GROUP, EVERYONE_WITH_BOT, List.of(
           new Line(2, "오늘 점심 뭐 드실래요"),
           new Line(4, "저는 아무거나 좋아요"),
           new Line(1, "어제 국수 먹었으니까 오늘은 밥이요"),
@@ -168,6 +185,8 @@ public class DemoDataConfig {
       ChatRoomMemberSeeder seeder,
       PasswordEncoder passwordEncoder) {
     return arguments -> {
+      // 사람보다 먼저 만든다 — 방 참여자 목록이 봇을 찾을 수 있어야 한다
+      seedBot(users, passwordEncoder);
       seedUser(users, passwordEncoder, "jiwon@demo.local", "지원");
       seedUser(users, passwordEncoder, "taeho@demo.local", "태호");
       seedUser(users, passwordEncoder, "yujin@demo.local", "유진");
@@ -176,6 +195,27 @@ public class DemoDataConfig {
       seedUser(users, passwordEncoder, "haram@demo.local", "하람");
       seeder.seedConversations(users, rooms, messages);
     };
+  }
+
+  /**
+   * 안내봇 계정.
+   *
+   * <p>{@code bot = true}라서 화면이 이름 옆에 BOT 배지를 그린다. 사람인 척하지 않는다.
+   * 비밀번호는 사람과 같은 방식으로 넣지만 아무도 이 계정으로 로그인하지 않는다 —
+   * 둘러보기는 {@link #PERSONAS}에서만 고른다.
+   */
+  private void seedBot(UserRepository users, PasswordEncoder encoder) {
+    if (users.existsByEmail(ChatBotRules.BOT_EMAIL)) return;
+    try {
+      users.saveAndFlush(
+          new User(
+              ChatBotRules.BOT_EMAIL,
+              encoder.encode(DEMO_PASSWORD),
+              ChatBotRules.BOT_NICKNAME,
+              true));
+    } catch (DataIntegrityViolationException ignored) {
+      log.debug("다른 app instance가 안내봇을 먼저 생성했습니다");
+    }
   }
 
   private void seedUser(

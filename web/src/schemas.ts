@@ -51,6 +51,9 @@ export const chatMessageSchema = z.object({
   roomId: z.number().int().positive(),
   senderId: z.number().int().positive(),
   senderNickname: z.string().min(1),
+  /* 사람이 아니라 봇인가. 서버가 users.bot을 실어 준다 — 화면에서 닉네임을 비교하지 않는다.
+     옛 메시지 캐시에는 없을 수 있어 기본값을 둔다. */
+  senderBot: z.boolean().optional().default(false),
   content: z.string(),
   type: messageTypeSchema,
   status: z.literal('PERSISTED'),

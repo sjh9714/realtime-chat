@@ -19,6 +19,15 @@ public class MessageResponse {
   private Long roomId;
   private Long senderId;
   private String senderNickname;
+
+  /**
+   * 보낸 이가 봇인가. 화면이 이름 옆에 BOT 배지를 그리는 근거다.
+   *
+   * <p>Kafka 이벤트에 실어 나르지 않는다. 저장된 {@link Message}가 보낸 이를 들고 있으므로
+   * 여기서 읽으면 된다 — 이벤트에 복사해 두면 그 값이 낡을 수 있다.
+   */
+  private boolean senderBot;
+
   private String content;
   private MessageType type;
   private MessagePublishStatus status;
@@ -32,6 +41,7 @@ public class MessageResponse {
         message.getChatRoom().getId(),
         message.getSender().getId(),
         message.getSender().getNickname(),
+        message.getSender().isBot(),
         message.getContent(),
         message.getType(),
         MessagePublishStatus.PERSISTED,

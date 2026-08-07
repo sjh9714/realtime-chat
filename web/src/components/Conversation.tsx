@@ -231,7 +231,13 @@ export function Conversation({
                   : <span className="message-avatar message-avatar-blank" aria-hidden="true" />
               )}
               <div className="message-block">
-                {!mine && head && <p className="message-sender">{message.senderNickname}</p>}
+                {!mine && head && (
+                  <p className="message-sender">
+                    {message.senderNickname}
+                    {/* 봇을 사람인 척 두지 않는다. 색이 아니라 글자로 적는다 */}
+                    {message.senderBot && <span className="bot-badge">BOT</span>}
+                  </p>
+                )}
                 {/* 시각은 묶음의 마지막 줄에만, 말풍선 옆에 붙는다 */}
                 <div className="message-line">
                   <div className="message-bubble">

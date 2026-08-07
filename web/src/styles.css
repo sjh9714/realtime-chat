@@ -759,6 +759,19 @@ button:disabled {
   min-width: 0;
 }
 
+/* 봇을 사람인 척 두지 않는다. 색이 아니라 글자로 적어 색각과 무관하게 읽힌다 */
+.bot-badge {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
 .message-sender {
   margin: 0 0 4px;
   color: var(--text-3);
