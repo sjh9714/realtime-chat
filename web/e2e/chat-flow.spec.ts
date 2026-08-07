@@ -185,23 +185,29 @@ test('demo is one-click, strict-headered, accessible, and keyboard operable', as
   const response = await page.goto('/');
   expect(response?.headers()['content-security-policy']).toContain("default-src 'self'");
   expect(response?.headers()['permissions-policy']).toContain('camera=()');
-  await expect(page.getByRole('button', { name: 'Alice 데모 계정으로 바로 시작' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '체험 계정으로 바로 시작' })).toBeVisible();
   await assertNoSeriousAxeViolations(page);
 
-  await page.getByRole('button', { name: 'Alice 데모 계정으로 바로 시작' }).click();
+  await page.getByRole('button', { name: '체험 계정으로 바로 시작' }).click();
   await expect(page.getByText('Alice', { exact: true })).toBeVisible();
-  const correctnessDetails = page.locator('details.correctness-details');
-  const correctnessSummary = correctnessDetails.locator('summary');
-  await correctnessSummary.focus();
+  /*
+   * 여기 있던 'How it stays correct' 서랍은 제품 안의 포트폴리오 글이라 지웠다.
+   * 검사하던 것(키보드로 조작되는가 · 조작 뒤에도 axe가 깨끗한가)은 그대로 두고,
+   * 실제로 있는 컨트롤인 대화 목록으로 옮긴다.
+   */
+  const room = page.getByRole('button', { name: /제품팀 스탠드업/ });
+  await room.focus();
   await page.keyboard.press('Enter');
-  await expect(correctnessDetails).toHaveAttribute('open', '');
-  await expect(page.getByText('DB commit → broadcast')).toBeVisible();
-  await expect(page.getByText('두 경계에서 중복 제거')).toBeVisible();
-  await expect(page.getByText('Cursor로 재연결')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('제품팀 스탠드업');
   await assertNoSeriousAxeViolations(page);
-  await page.keyboard.press('Space');
-  await expect(correctnessDetails).not.toHaveAttribute('open', '');
-  await assertNoSeriousAxeViolations(page);
+
+  // 날짜 구분선과 연속 메시지 묶기 — 메신저의 관례가 실제로 그려지는지
+  await expect(page.locator('.day-divider')).not.toHaveCount(0);
+  await expect(page.locator('.message-row.is-run')).not.toHaveCount(0);
+  // 이어지는 줄은 이름을 반복하지 않는다
+  await expect(page.locator('.message-row.is-run .message-sender')).toHaveCount(0);
+  // 시각은 묶음의 마지막 줄에만 붙는다
+  await expect(page.locator('.message-row.is-run:not(.is-tail) time')).toHaveCount(0);
 
   expect(diagnostics.pageErrors).toEqual([]);
   expect(diagnostics.consoleErrors).toEqual([]);

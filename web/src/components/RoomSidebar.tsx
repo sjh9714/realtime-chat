@@ -60,8 +60,8 @@ export function RoomSidebar({
     <aside className="room-sidebar" aria-label="대화 목록">
       <header className="sidebar-header">
         <div>
+          {/* 이름만 남긴다. 사이드바에 제품 설명("저장 경계를 확인하는 채팅")을 적지 않는다 */}
           <p className="wordmark wordmark-small">Relay</p>
-          <p className="sidebar-caption">저장 경계를 확인하는 채팅</p>
         </div>
         <button className="mobile-close" type="button" onClick={onCloseMobile} aria-label="대화 목록 닫기">
           닫기

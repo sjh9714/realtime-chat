@@ -34,21 +34,17 @@ export function AuthScreen() {
 
   return (
     <main className="auth-shell" id="main-content">
+      {/*
+        여기 있던 것: `Realtime delivery lab` 라벨, "보낸 순간과 저장된 순간을 구분합니다"
+        표어, 그리고 `01 SENDING / 02 ACCEPTED / 03 PERSISTED` 3단계 목록.
+        메신저 로그인 화면에 전달 파이프라인을 그려 두는 서비스는 없다.
+        이름과 한 줄만 남기고 나머지는 양식에 자리를 내준다.
+      */}
       <section className="auth-intro" aria-labelledby="auth-heading">
         <p className="wordmark">Relay</p>
         <div className="auth-copy">
-          <p className="eyebrow">Realtime delivery lab</p>
-          <h1 id="auth-heading">보낸 순간과 저장된 순간을 구분합니다.</h1>
-          <p>
-            연결이 끊겨도 누락 메시지를 다시 맞추고, 각 메시지의 저장 상태를 직접 확인하는 채팅
-            데모입니다.
-          </p>
+          <h1 id="auth-heading">팀과 나누는 대화를 한곳에서.</h1>
         </div>
-        <ol className="delivery-sequence" aria-label="메시지 전달 단계">
-          <li><span>01</span> SENDING</li>
-          <li><span>02</span> ACCEPTED</li>
-          <li><span>03</span> PERSISTED</li>
-        </ol>
       </section>
 
       <section className="auth-panel" aria-label="계정 접속">
@@ -121,9 +117,14 @@ export function AuthScreen() {
               disabled={demoMutation.isPending}
               onClick={() => demoMutation.mutate()}
             >
-              {demoMutation.isPending ? '데모 준비 중…' : 'Alice 데모 계정으로 바로 시작'}
+              {demoMutation.isPending ? '준비 중…' : '체험 계정으로 바로 시작'}
             </button>
           )}
+          {/*
+            공개 배포라 누구나 가입할 수 있다. 진짜 계정으로 오해하지 않도록 한 줄 남긴다.
+            이건 제품 설명이 아니라 고지다 — 다만 눈에 띄지 않게 양식 아래에 둔다.
+          */}
+          {DEMO_MODE && <p className="auth-note">테스트 환경입니다. 대화 내용은 예고 없이 초기화될 수 있습니다.</p>}
           <p className="form-error" role="alert">
             {error instanceof Error ? error.message : ''}
           </p>

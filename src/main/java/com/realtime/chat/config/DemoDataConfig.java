@@ -48,40 +48,56 @@ public class DemoDataConfig {
   private static final long DEMO_SEED_LOCK = 8_270_101L;
 
   /**
-   * 한 대화의 대본. 말하는 사람은 참여자를 순서대로 돌아가며 정한다.
+   * 대본의 한 줄. {@code speaker}는 {@link Script#members()}의 자리 번호다.
+   *
+   * <p>전에는 말하는 사람을 참여자 순서대로 돌아가며 정했다. 그래서 한 사람이 두 번 이어
+   * 말하는 일이 한 번도 없었고, <b>화면의 연속 메시지 묶기가 한 번도 발동하지 않았다.</b>
+   * 실제 대화는 그렇지 않다 — 한 사람이 짧은 말을 이어 붙인다.
+   */
+  private record Line(int speaker, String text) {}
+
+  /**
+   * 한 대화의 대본.
    *
    * @param members 참여자 이메일 — 닉네임은 유일성이 보장되지 않는다
    */
-  private record Script(String name, RoomType type, List<String> members, List<String> lines) {}
+  private record Script(String name, RoomType type, List<String> members, List<Line> lines) {}
 
   private static final List<Script> SCRIPTS = List.of(
       new Script(null, RoomType.DIRECT, List.of("alice@demo.local", "bob@demo.local"), List.of(
-          "내일 회의 자료 초안 올려뒀어요",
-          "확인했어요. 3장만 다시 볼게요",
-          "네, 그 부분만 고치면 될 것 같아요",
-          "고친 버전 방금 올렸습니다",
-          "좋아요. 이대로 가시죠")),
+          new Line(0, "내일 회의 자료 초안 올려뒀어요"),
+          new Line(0, "3장이 좀 기니까 거기부터 봐 주세요"),
+          new Line(1, "확인했어요. 3장만 다시 볼게요"),
+          new Line(0, "네, 그 부분만 고치면 될 것 같아요"),
+          new Line(1, "고친 버전 방금 올렸습니다"),
+          new Line(1, "표도 하나 줄였어요"),
+          new Line(0, "좋아요. 이대로 가시죠"))),
       new Script(null, RoomType.DIRECT, List.of("alice@demo.local", "yujin@demo.local"), List.of(
-          "배포 시간 언제로 잡을까요?",
-          "금요일 오후는 피하고 싶어요",
-          "그럼 목요일 오전 어때요?",
-          "좋습니다. 그때로 잡을게요")),
+          new Line(0, "배포 시간 언제로 잡을까요?"),
+          new Line(1, "금요일 오후는 피하고 싶어요"),
+          new Line(1, "그때 트래픽이 제일 많아서요"),
+          new Line(0, "그럼 목요일 오전 어때요?"),
+          new Line(1, "좋습니다. 그때로 잡을게요"))),
       new Script(null, RoomType.DIRECT, List.of("alice@demo.local", "dohyun@demo.local"), List.of(
-          "로그에서 재시도가 계속 도는 게 보이는데 확인 부탁드려요",
-          "네, 백오프가 2.5초라 그렇게 보일 수 있어요",
-          "그럼 정상이네요. 감사합니다")),
+          new Line(0, "로그에서 재시도가 계속 도는 게 보이는데 확인 부탁드려요"),
+          new Line(1, "네, 백오프가 2.5초라 그렇게 보일 수 있어요"),
+          new Line(1, "실패로 안 넘어가면 정상입니다"),
+          new Line(0, "그럼 정상이네요. 감사합니다"))),
       new Script("제품팀 스탠드업", RoomType.GROUP, List.of("alice@demo.local", "bob@demo.local", "semi@demo.local", "haram@demo.local"), List.of(
-          "오늘 스탠드업 10분 뒤에 시작할게요",
-          "저는 어제 작업 이어서 합니다",
-          "저는 리뷰 두 건 남았어요",
-          "설계 문서 초안 공유드렸습니다",
-          "확인하고 코멘트 남길게요",
-          "감사합니다")),
+          new Line(0, "오늘 스탠드업 10분 뒤에 시작할게요"),
+          new Line(1, "저는 어제 작업 이어서 합니다"),
+          new Line(1, "오전에 끝날 것 같아요"),
+          new Line(2, "저는 리뷰 두 건 남았어요"),
+          new Line(3, "설계 문서 초안 공유드렸습니다"),
+          new Line(3, "의견 주시면 이번 주 안에 반영할게요"),
+          new Line(0, "확인하고 코멘트 남길게요"),
+          new Line(3, "감사합니다"))),
       new Script("금요일 로컬 배포", RoomType.GROUP, List.of("alice@demo.local", "dohyun@demo.local", "semi@demo.local"), List.of(
-          "스테이징 올렸습니다",
-          "확인했어요. 대기열 화면만 다시 볼게요",
-          "저도 좌석표 쪽 보고 있습니다",
-          "둘 다 문제 없으면 오후에 넘길게요")));
+          new Line(1, "스테이징 올렸습니다"),
+          new Line(0, "확인했어요. 대기열 화면만 다시 볼게요"),
+          new Line(2, "저도 좌석표 쪽 보고 있습니다"),
+          new Line(2, "구역 순서만 한 번 더 확인할게요"),
+          new Line(0, "둘 다 문제 없으면 오후에 넘길게요"))));
 
   @Bean
   ApplicationRunner seedDemoData(
@@ -179,13 +195,23 @@ public class DemoDataConfig {
         jdbc.update("UPDATE chat_rooms SET created_at = ? WHERE id = ?", opened, room.getId());
         jdbc.update("UPDATE chat_room_members SET joined_at = ? WHERE room_id = ?", opened, room.getId());
 
+        /*
+         * 이어 말하는 줄은 1분 뒤에 둔다. 화면이 같은 사람의 연속 메시지를 5분 안일 때만
+         * 묶으므로(`Conversation.tsx`), 7분씩 벌리면 묶이지 않는다.
+         * 사람이 바뀔 때만 7분을 띄운다.
+         */
+        LocalDateTime at = cursor;
         for (int i = 0; i < script.lines().size(); i++) {
-          User sender = members.get(i % members.size());
+          Line line = script.lines().get(i);
+          if (i > 0) {
+            boolean sameSpeaker = script.lines().get(i - 1).speaker() == line.speaker();
+            at = at.plusMinutes(sameSpeaker ? 1L : 7L);
+          }
           Message message = new Message(
-              UUID.randomUUID(), room, sender, script.lines().get(i), MessageType.TEXT);
+              UUID.randomUUID(), room, members.get(line.speaker()), line.text(), MessageType.TEXT);
           messages.saveAndFlush(message);
           messageIds.add(message.getId());
-          when.add(cursor.plusMinutes(i * 7L));
+          when.add(at);
         }
         cursor = cursor.plusDays(1);
       }

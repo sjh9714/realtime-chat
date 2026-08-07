@@ -134,31 +134,14 @@ function ConnectedChatShell({
       )}
       <section className="workspace">
         <div className="utility-bar">
+          {/*
+            사용자 id를 보여주지 않는다. 메신저에서 내 계정 번호는 알 이유가 없는 값이다.
+            여기 있던 'How it stays correct' 서랍(DB transaction·optimistic 전송 설명)도
+            지웠다 — 제품 안에 제품 설명서를 넣지 않는다.
+          */}
           <p>
             <strong>{currentUser.nickname}</strong>
-            <span>#{currentUser.id}</span>
           </p>
-          <details className="correctness-details">
-            <summary>How it stays correct</summary>
-            <div className="correctness-panel">
-              <p className="eyebrow">Delivery contract</p>
-              <h2>메시지가 사라지거나 두 번 보이지 않도록</h2>
-              <ol>
-                <li>
-                  <strong>DB commit → broadcast</strong>
-                  <span>메시지는 DB transaction이 commit된 뒤에만 다른 사용자에게 전달됩니다.</span>
-                </li>
-                <li>
-                  <strong>두 경계에서 중복 제거</strong>
-                  <span><code>clientMessageId</code>로 optimistic 전송과 retry를 맞추고, DB message ID로 sync와 broadcast 결과를 합칩니다.</span>
-                </li>
-                <li>
-                  <strong>Cursor로 재연결</strong>
-                  <span>마지막으로 본 DB message ID 다음부터 조회해 연결이 끊긴 동안 빠진 메시지만 합칩니다.</span>
-                </li>
-              </ol>
-            </div>
-          </details>
           <button type="button" onClick={onLogout}>로그아웃</button>
         </div>
         {/*

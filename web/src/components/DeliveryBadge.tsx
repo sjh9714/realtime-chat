@@ -12,10 +12,17 @@ interface DeliveryBadgeProps {
  *
  * 점 자체는 `aria-hidden`이다. 화면 낭독기에는 글자만 한 번 읽히면 된다.
  */
+/*
+ * 낱말은 제품의 것으로 쓴다. '큐 접수'와 '저장됨'은 엔지니어의 말이다 —
+ * 쓰는 사람은 큐가 뭔지 알 이유가 없다.
+ *
+ * **구분 자체는 그대로다.** 받아들여진 것과 실제로 남은 것은 여전히 다른 상태이고,
+ * 그게 이 제품의 알맹이다. 바뀐 것은 이름뿐이다.
+ */
 const labels: Record<DeliveryStatus, string> = {
   SENDING: '보내는 중',
-  ACCEPTED: '큐 접수',
-  PERSISTED: '저장됨',
+  ACCEPTED: '전송됨',
+  PERSISTED: '전달 완료',
   FAILED: '실패',
 };
 
