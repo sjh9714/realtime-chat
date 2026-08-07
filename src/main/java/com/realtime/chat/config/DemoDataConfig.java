@@ -63,8 +63,33 @@ public class DemoDataConfig {
    */
   private record Script(String name, RoomType type, List<String> members, List<Line> lines) {}
 
+  /**
+   * 데모 인물. 이메일이 곧 열쇠다.
+   *
+   * <p><b>이 목록이 곧 데모 진입에서 내주는 사람들이다</b>({@code DemoSessionController}).
+   * 창을 두 개 열면 서로 다른 사람이 되어 실제로 대화가 오간다.
+   *
+   * <p>전에는 Alice·Bob이 섞여 있었다. 교과서 placeholder 이름이라 읽는 순간
+   * 소품인 것이 보였다.
+   */
+  public static final List<String> PERSONAS = List.of(
+      "jiwon@demo.local",
+      "taeho@demo.local",
+      "yujin@demo.local",
+      "dohyun@demo.local",
+      "semi@demo.local",
+      "haram@demo.local");
+
+  /*
+   * 그룹 방에는 여섯 명이 모두 들어간다.
+   *
+   * 데모 진입이 인물을 돌아가며 내주므로, 누가 되든 방이 채워져 있어야 한다.
+   * 한두 사람만 넣으면 어떤 사람으로 들어왔을 때 목록이 비어 버린다.
+   */
+  private static final List<String> EVERYONE = PERSONAS;
+
   private static final List<Script> SCRIPTS = List.of(
-      new Script(null, RoomType.DIRECT, List.of("alice@demo.local", "bob@demo.local"), List.of(
+      new Script(null, RoomType.DIRECT, List.of("jiwon@demo.local", "taeho@demo.local"), List.of(
           new Line(0, "내일 회의 자료 초안 올려뒀어요"),
           new Line(0, "3장이 좀 기니까 거기부터 봐 주세요"),
           new Line(1, "확인했어요. 3장만 다시 볼게요"),
@@ -72,32 +97,68 @@ public class DemoDataConfig {
           new Line(1, "고친 버전 방금 올렸습니다"),
           new Line(1, "표도 하나 줄였어요"),
           new Line(0, "좋아요. 이대로 가시죠"))),
-      new Script(null, RoomType.DIRECT, List.of("alice@demo.local", "yujin@demo.local"), List.of(
-          new Line(0, "배포 시간 언제로 잡을까요?"),
-          new Line(1, "금요일 오후는 피하고 싶어요"),
-          new Line(1, "그때 트래픽이 제일 많아서요"),
-          new Line(0, "그럼 목요일 오전 어때요?"),
-          new Line(1, "좋습니다. 그때로 잡을게요"))),
-      new Script(null, RoomType.DIRECT, List.of("alice@demo.local", "dohyun@demo.local"), List.of(
-          new Line(0, "로그에서 재시도가 계속 도는 게 보이는데 확인 부탁드려요"),
-          new Line(1, "네, 백오프가 2.5초라 그렇게 보일 수 있어요"),
-          new Line(1, "실패로 안 넘어가면 정상입니다"),
-          new Line(0, "그럼 정상이네요. 감사합니다"))),
-      new Script("제품팀 스탠드업", RoomType.GROUP, List.of("alice@demo.local", "bob@demo.local", "semi@demo.local", "haram@demo.local"), List.of(
+      new Script(null, RoomType.DIRECT, List.of("yujin@demo.local", "dohyun@demo.local"), List.of(
+          new Line(0, "아까 말한 문서 어디 있어요?"),
+          new Line(1, "공유 폴더 안에 넣어 뒀어요"),
+          new Line(1, "이름이 좀 길어서 검색하면 바로 나옵니다"),
+          new Line(0, "찾았어요. 고마워요"))),
+      new Script(null, RoomType.DIRECT, List.of("semi@demo.local", "haram@demo.local"), List.of(
+          new Line(0, "오늘 몇 시에 퇴근하세요?"),
+          new Line(1, "여섯 시 조금 넘어서요"),
+          new Line(0, "그럼 같이 나가요"),
+          new Line(1, "좋아요"))),
+      new Script(null, RoomType.DIRECT, List.of("jiwon@demo.local", "semi@demo.local"), List.of(
+          new Line(1, "내일 오전에 잠깐 시간 되세요?"),
+          new Line(0, "열한 시 이후면 괜찮아요"),
+          new Line(1, "그럼 열한 시로 잡을게요"),
+          new Line(1, "삼십 분이면 충분할 것 같습니다"),
+          new Line(0, "네 그때 봬요"))),
+      new Script("제품팀 스탠드업", RoomType.GROUP, EVERYONE, List.of(
           new Line(0, "오늘 스탠드업 10분 뒤에 시작할게요"),
           new Line(1, "저는 어제 작업 이어서 합니다"),
           new Line(1, "오전에 끝날 것 같아요"),
-          new Line(2, "저는 리뷰 두 건 남았어요"),
-          new Line(3, "설계 문서 초안 공유드렸습니다"),
-          new Line(3, "의견 주시면 이번 주 안에 반영할게요"),
+          new Line(4, "저는 리뷰 두 건 남았어요"),
+          new Line(4, "오후에는 다른 일 볼 수 있습니다"),
+          new Line(5, "설계 문서 초안 공유드렸습니다"),
+          new Line(5, "의견 주시면 이번 주 안에 반영할게요"),
+          new Line(2, "저는 어제 올린 것 확인만 하면 됩니다"),
+          new Line(3, "저도 특이사항 없습니다"),
           new Line(0, "확인하고 코멘트 남길게요"),
-          new Line(3, "감사합니다"))),
-      new Script("금요일 로컬 배포", RoomType.GROUP, List.of("alice@demo.local", "dohyun@demo.local", "semi@demo.local"), List.of(
-          new Line(1, "스테이징 올렸습니다"),
-          new Line(0, "확인했어요. 대기열 화면만 다시 볼게요"),
-          new Line(2, "저도 좌석표 쪽 보고 있습니다"),
-          new Line(2, "구역 순서만 한 번 더 확인할게요"),
-          new Line(0, "둘 다 문제 없으면 오후에 넘길게요"))));
+          new Line(0, "다들 고생하셨습니다"),
+          new Line(5, "감사합니다"))),
+      new Script("배포 준비", RoomType.GROUP, EVERYONE, List.of(
+          new Line(3, "스테이징 올렸습니다"),
+          new Line(3, "한 번씩 눌러 봐 주세요"),
+          new Line(0, "확인했어요. 목록 화면만 다시 볼게요"),
+          new Line(4, "저도 지금 보고 있습니다"),
+          new Line(4, "지금까지는 특이사항 없어요"),
+          new Line(1, "저는 로그만 잠깐 봤는데 깨끗합니다"),
+          new Line(0, "둘 다 문제 없으면 오후에 넘길게요"),
+          new Line(2, "네 그때 맞춰서 공지 준비할게요"),
+          new Line(5, "확인했습니다"),
+          new Line(0, "고맙습니다"))),
+      new Script("디자인 리뷰", RoomType.GROUP, EVERYONE, List.of(
+          new Line(5, "시안 두 개 올렸습니다"),
+          new Line(5, "A는 여백을 넉넉히, B는 정보를 더 담았어요"),
+          new Line(2, "저는 B가 좋습니다"),
+          new Line(2, "한 번에 보이는 게 많아서요"),
+          new Line(4, "저도 B요. 다만 글자가 조금 작아 보여요"),
+          new Line(0, "그건 키우면 될 것 같아요"),
+          new Line(1, "저는 A가 편했는데, 다수가 B면 따르겠습니다"),
+          new Line(5, "그럼 B로 가고 글자만 한 단계 키우겠습니다"),
+          new Line(3, "좋습니다"),
+          new Line(0, "정리 고맙습니다"))),
+      new Script("점심 뭐 먹지", RoomType.GROUP, EVERYONE, List.of(
+          new Line(2, "오늘 점심 뭐 드실래요"),
+          new Line(4, "저는 아무거나 좋아요"),
+          new Line(1, "어제 국수 먹었으니까 오늘은 밥이요"),
+          new Line(3, "1층에 새로 생긴 데 어때요"),
+          new Line(3, "웨이팅이 좀 있다던데 지금 가면 괜찮을 것 같아요"),
+          new Line(5, "저 거기 가 봤는데 괜찮았어요"),
+          new Line(0, "그럼 거기로 가죠"),
+          new Line(2, "열두 시에 로비에서 봬요"),
+          new Line(4, "네"),
+          new Line(1, "곧 내려갈게요"))));
 
   @Bean
   ApplicationRunner seedDemoData(
@@ -107,8 +168,8 @@ public class DemoDataConfig {
       ChatRoomMemberSeeder seeder,
       PasswordEncoder passwordEncoder) {
     return arguments -> {
-      seedUser(users, passwordEncoder, "alice@demo.local", "Alice");
-      seedUser(users, passwordEncoder, "bob@demo.local", "Bob");
+      seedUser(users, passwordEncoder, "jiwon@demo.local", "지원");
+      seedUser(users, passwordEncoder, "taeho@demo.local", "태호");
       seedUser(users, passwordEncoder, "yujin@demo.local", "유진");
       seedUser(users, passwordEncoder, "dohyun@demo.local", "도현");
       seedUser(users, passwordEncoder, "semi@demo.local", "세미");

@@ -7,6 +7,7 @@ import { useChatSocket } from '../hooks/use-chat-socket';
 import { Conversation } from './Conversation';
 import { CommandPalette } from './CommandPalette';
 import { RoomSidebar } from './RoomSidebar';
+import { takePendingInvite } from '../lib/invite';
 
 export function ChatShell() {
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false);
@@ -46,6 +47,40 @@ export function ChatShell() {
     if (selectedRoomId === null && rooms.data?.length) selectRoom(rooms.data[0].id);
   }, [rooms.data, selectRoom, selectedRoomId]);
 
+  /*
+   * 초대 링크(`?join=12`)를 타고 들어온 경우.
+   *
+   * 이미 참여 중이면 서버가 409를 주는데 그건 실패가 아니다 — 방을 열어 주면 된다.
+   * 어느 쪽이든 목록을 다시 받아야 새 방이 사이드바에 뜬다.
+   */
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  useEffect(() => {
+    const roomId = takePendingInvite();
+    if (roomId === null) return;
+    let cancelled = false;
+    void api
+      .joinRoom(session.token, roomId)
+      .catch((error: unknown) => {
+        const status = (error as { status?: number }).status;
+        if (status === 409) return;
+        throw error;
+      })
+      .then(async () => {
+        if (cancelled) return;
+        await queryClient.invalidateQueries({ queryKey: ['rooms', session.userId] });
+        if (!cancelled) selectRoom(roomId);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setInviteError(
+          error instanceof Error ? error.message : '초대받은 대화에 참여하지 못했습니다.',
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient, selectRoom, session.token, session.userId]);
+
   if (me.isLoading) {
     return <main className="loading-screen" id="main-content"><p>채팅 작업 공간을 여는 중…</p></main>;
   }
@@ -71,6 +106,7 @@ export function ChatShell() {
       currentUser={me.data}
       rooms={rooms.data ?? []}
       roomsError={rooms.error instanceof Error ? rooms.error.message : null}
+      inviteError={inviteError}
       selectedRoomId={selectedRoomId}
       selectRoom={selectRoom}
       connectionStatus={connectionStatus}
@@ -92,6 +128,7 @@ interface ConnectedChatShellProps {
   currentUser: { id: number; nickname: string };
   rooms: Awaited<ReturnType<typeof api.rooms>>;
   roomsError: string | null;
+  inviteError: string | null;
   selectedRoomId: number | null;
   selectRoom: (roomId: number | null) => void;
   connectionStatus: ReturnType<typeof useChatStore.getState>['connectionStatus'];
@@ -106,6 +143,7 @@ function ConnectedChatShell({
   currentUser,
   rooms,
   roomsError,
+  inviteError,
   selectedRoomId,
   selectRoom,
   connectionStatus,
@@ -157,6 +195,7 @@ function ConnectedChatShell({
             <p className="connection-notice" role="status">{connectionNotice}</p>
           )}
           {roomsError && <p className="connection-notice notice-error" role="alert">{roomsError}</p>}
+          {inviteError && <p className="connection-notice notice-error" role="alert">{inviteError}</p>}
         </div>
         {selectedRoom ? (
           <Conversation

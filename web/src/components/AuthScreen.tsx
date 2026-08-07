@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { api, DEMO_MODE } from '../api';
+import { hasPendingInvite } from '../lib/invite';
 import { useAuthStore } from '../stores/auth-store';
 
 export function AuthScreen() {
@@ -16,8 +17,14 @@ export function AuthScreen() {
         : api.signup(email, password, nickname),
     onSuccess: setSession,
   });
+  /*
+   * 둘러보기.
+   *
+   * 전에는 무조건 `alice@demo.local`로 로그인해서, 창을 두 개 열어도 둘 다 같은 사람이라
+   * 메시지를 주고받을 수가 없었다. 이제 서버가 데모 인물을 돌아가며 내준다.
+   */
   const demoMutation = useMutation({
-    mutationFn: () => api.login('alice@demo.local', 'demo-password'),
+    mutationFn: () => api.demoSession(),
     onSuccess: setSession,
   });
   const error = mutation.error ?? demoMutation.error;
@@ -44,6 +51,11 @@ export function AuthScreen() {
         <p className="wordmark">Relay</p>
         <div className="auth-copy">
           <h1 id="auth-heading">팀과 나누는 대화를 한곳에서.</h1>
+          {hasPendingInvite() && (
+            <p className="auth-invite" role="status">
+              초대받은 대화가 있습니다. 로그인하면 바로 참여합니다.
+            </p>
+          )}
         </div>
       </section>
 
@@ -110,18 +122,24 @@ export function AuthScreen() {
                 ? '채팅으로 들어가기'
                 : '계정 만들고 시작하기'}
           </button>
+          {/*
+            둘러보기는 로그인 양식 뒤에 선다. 전에는 같은 크기의 버튼이라 데모 장치가
+            먼저 보였다 — 실제 서비스의 로그인 화면은 그렇지 않다.
+          */}
           {DEMO_MODE && (
-            <button
-              className="demo-action"
-              type="button"
-              disabled={demoMutation.isPending}
-              onClick={() => demoMutation.mutate()}
-            >
-              {demoMutation.isPending ? '준비 중…' : '체험 계정으로 바로 시작'}
-            </button>
+            <p className="auth-secondary">
+              <button
+                className="link-action"
+                type="button"
+                disabled={demoMutation.isPending}
+                onClick={() => demoMutation.mutate()}
+              >
+                {demoMutation.isPending ? '준비 중…' : '가입하지 않고 둘러보기'}
+              </button>
+            </p>
           )}
           {/*
-            공개 배포라 누구나 가입할 수 있다. 진짜 계정으로 오해하지 않도록 한 줄 남긴다.
+            누구나 가입할 수 있으니 진짜 계정으로 오해하지 않도록 한 줄 남긴다.
             이건 제품 설명이 아니라 고지다 — 다만 눈에 띄지 않게 양식 아래에 둔다.
           */}
           {DEMO_MODE && <p className="auth-note">테스트 환경입니다. 대화 내용은 예고 없이 초기화될 수 있습니다.</p>}

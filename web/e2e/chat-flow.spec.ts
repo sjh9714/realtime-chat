@@ -185,11 +185,16 @@ test('demo is one-click, strict-headered, accessible, and keyboard operable', as
   const response = await page.goto('/');
   expect(response?.headers()['content-security-policy']).toContain("default-src 'self'");
   expect(response?.headers()['permissions-policy']).toContain('camera=()');
-  await expect(page.getByRole('button', { name: '체험 계정으로 바로 시작' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '가입하지 않고 둘러보기' })).toBeVisible();
   await assertNoSeriousAxeViolations(page);
 
-  await page.getByRole('button', { name: '체험 계정으로 바로 시작' }).click();
-  await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '가입하지 않고 둘러보기' }).click();
+  /*
+   * 둘러보기는 데모 인물을 돌아가며 내준다 — 누가 될지 정해져 있지 않다.
+   * 전에는 무조건 Alice였고, 그래서 창을 두 개 열어도 둘 다 같은 사람이라
+   * 메시지를 주고받을 수 없었다. 여기서는 "누군가로 들어와졌다"만 본다.
+   */
+  await expect(page.locator('.utility-bar strong')).not.toBeEmpty();
   /*
    * 여기 있던 'How it stays correct' 서랍은 제품 안의 포트폴리오 글이라 지웠다.
    * 검사하던 것(키보드로 조작되는가 · 조작 뒤에도 axe가 깨끗한가)은 그대로 두고,
@@ -340,5 +345,67 @@ test('Alice creates a room and app-1 delivers to app-2 exactly once across recov
     await rawBob.deactivate();
     await aliceBrowser.context.close();
     await bobBrowser.context.close();
+  }
+});
+
+/*
+ * 이 데모의 존재 이유.
+ *
+ * 전에는 둘러보기가 언제나 같은 사람(alice@demo.local)으로 들어가서, 창을 두 개 열어도
+ * 둘 다 같은 사람이었다. 실시간 전달이 이 제품의 전부인데 방문자는 그걸 한 번도 보지
+ * 못했고, 그래서 "실제 서비스가 아니라 보여주기 식"으로 읽혔다.
+ *
+ * 이제 인물을 돌아가며 내준다. 이 테스트는 그 약속을 지킨다 —
+ * 두 창이 서로 다른 사람이고, 한쪽에서 보낸 것이 다른 쪽에 도착한다.
+ */
+test('둘러보기로 연 두 창은 서로 다른 사람이고 메시지가 실제로 오간다', async ({ browser }) => {
+  const openDemo = async () => {
+    const page = await (await browser.newContext()).newPage();
+    await page.goto('/');
+    await page.getByRole('button', { name: '가입하지 않고 둘러보기' }).click();
+    await expect(page.locator('.utility-bar strong')).not.toBeEmpty();
+    const who = await page.locator('.utility-bar strong').innerText();
+    await page.getByRole('button', { name: /제품팀 스탠드업/ }).click();
+    await page.locator('.message-row').first().waitFor();
+    return { page, who };
+  };
+
+  const sender = await openDemo();
+  const receiver = await openDemo();
+  expect(sender.who).not.toBe(receiver.who);
+
+  /*
+   * 받는 쪽의 구독이 설 때까지 기다린다. 열자마자 보내면 구독 전이라 밀려 오지 않고
+   * 재접속 보충 조회로만 채워진다 — 실시간으로 도착하는지를 보려면 기다려야 한다.
+   */
+  await expect(receiver.page.locator('.conversation-header p').first()).toContainText('명 온라인');
+
+  const text = `실시간 확인 ${Date.now()}`;
+  await sender.page.getByPlaceholder('메시지를 입력하세요').fill(text);
+  await sender.page.keyboard.press('Enter');
+
+  await expect(receiver.page.getByText(text)).toBeVisible({ timeout: 15_000 });
+  // 보낸 쪽은 DB에 남은 뒤에야 '전달 완료'가 된다
+  await expect(sender.page.locator('.message-row').last()).toContainText('전달 완료');
+});
+
+test('그룹 대화에는 초대 링크가 있고 1:1에는 없다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '가입하지 않고 둘러보기' }).click();
+  await expect(page.locator('.utility-bar strong')).not.toBeEmpty();
+
+  await page.getByRole('button', { name: /제품팀 스탠드업/ }).click();
+  const copy = page.getByRole('button', { name: '초대 링크 복사' });
+  await expect(copy).toBeVisible();
+
+  // 서버가 1:1 방 참여를 거부하므로 링크를 주지 않는다
+  const direct = page.locator('.room-item, aside li button').filter({ hasText: /^(?!.*스탠드업|.*배포 준비|.*디자인 리뷰|.*점심).*$/ });
+  if (await direct.count()) {
+    await direct.first().click();
+    await page.locator('.message-row').first().waitFor();
+    const header = await page.locator('.conversation-header').innerText();
+    if (!/스탠드업|배포 준비|디자인 리뷰|점심/.test(header)) {
+      await expect(page.getByRole('button', { name: '초대 링크 복사' })).toHaveCount(0);
+    }
   }
 });

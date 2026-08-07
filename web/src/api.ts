@@ -86,6 +86,24 @@ export const api = {
   room(token: string, roomId: number) {
     return request(`/api/rooms/${roomId}`, roomDetailSchema, {}, token);
   },
+  /**
+   * 초대 링크로 그룹 방에 참여한다.
+   *
+   * 이미 참여 중이면 서버가 409를 준다 — 그건 실패가 아니라 "벌써 됨"이므로
+   * 부르는 쪽에서 성공으로 다룬다(`ChatShell`).
+   */
+  joinRoom(token: string, roomId: number) {
+    return request(
+      `/api/rooms/${roomId}/join`,
+      roomDetailSchema,
+      { method: 'POST' },
+      token,
+    );
+  },
+  /** 둘러보기. 데모 인물을 돌아가며 내준다 — 창을 두 개 열면 서로 다른 사람이 된다 */
+  demoSession() {
+    return request('/api/demo/session', authResponseSchema, { method: 'POST' });
+  },
   createDirectRoom(token: string, targetUserId: number) {
     return request(
       '/api/rooms/direct',

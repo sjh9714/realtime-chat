@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useChatStore } from '../stores/chat-store';
 import type { ChatMessage, ConnectionStatus, Room, UserSummary } from '../types';
 import { DeliveryBadge } from './DeliveryBadge';
+import { inviteUrl } from '../lib/invite';
 
 interface ConversationProps {
   token: string;
@@ -111,6 +112,7 @@ export function Conversation({
   onOpenRooms,
 }: ConversationProps) {
   const [content, setContent] = useState('');
+  const [copied, setCopied] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
   const messages = useChatStore((state) => state.messagesByRoom[room.id] ?? EMPTY_MESSAGES);
   const onlineIds = useChatStore((state) => state.onlineByRoom[room.id] ?? EMPTY_USER_IDS);
@@ -163,6 +165,23 @@ export function Conversation({
                 : '오프라인 · 재연결 중'}
           </p>
         </div>
+        {/*
+          초대 링크. 1:1 대화에는 없다 — 서버가 DIRECT 방 참여를 거부한다.
+          이게 있어야 이 앱이 "혼자 보는 화면"이 아니라 쓸 수 있는 메신저가 된다.
+        */}
+        {room.type === 'GROUP' && (
+          <button
+            className="invite-copy"
+            type="button"
+            onClick={async () => {
+              await navigator.clipboard.writeText(inviteUrl(room.id));
+              setCopied(true);
+              window.setTimeout(() => setCopied(false), 2000);
+            }}
+          >
+            {copied ? '복사했습니다' : '초대 링크 복사'}
+          </button>
+        )}
         <p className="member-summary">
           {detail.data?.members.map((member) => member.nickname).join(', ') ?? '멤버 확인 중'}
         </p>
