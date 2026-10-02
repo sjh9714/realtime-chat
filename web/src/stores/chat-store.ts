@@ -11,6 +11,8 @@ interface ChatState {
   selectedRoomId: number | null;
   connectionStatus: ConnectionStatus;
   messagesByRoom: Record<number, ChatMessage[]>;
+  historyCursorByRoom: Record<number, number>;
+  completeHistorySync: (roomId: number, cursor: number) => void;
   onlineByRoom: Record<number, number[]>;
   connectionNotice: string | null;
   selectRoom: (roomId: number | null) => void;
@@ -67,8 +69,15 @@ export const useChatStore = create<ChatState>((set) => ({
   selectedRoomId: null,
   connectionStatus: 'OFFLINE',
   messagesByRoom: {},
+  historyCursorByRoom: {},
   onlineByRoom: {},
   connectionNotice: null,
+  completeHistorySync: (roomId, cursor) => set((state) => ({
+    historyCursorByRoom: {
+      ...state.historyCursorByRoom,
+      [roomId]: Math.max(state.historyCursorByRoom[roomId] ?? 0, cursor),
+    },
+  })),
   selectRoom: (selectedRoomId) => set({ selectedRoomId }),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
   setConnectionNotice: (connectionNotice) => set({ connectionNotice }),
@@ -138,6 +147,7 @@ export const useChatStore = create<ChatState>((set) => ({
       selectedRoomId: null,
       connectionStatus: 'OFFLINE',
       messagesByRoom: {},
+      historyCursorByRoom: {},
       onlineByRoom: {},
       connectionNotice: null,
     }),

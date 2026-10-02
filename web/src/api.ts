@@ -116,7 +116,7 @@ export const api = {
     return request(`/api/rooms/${roomId}/messages?size=50`, messagePageSchema, {}, token);
   },
   syncMessages(token: string, roomId: number, afterMessageId?: number) {
-    const query = afterMessageId ? `?afterMessageId=${afterMessageId}&limit=100` : '?limit=100';
+    const query = afterMessageId !== undefined ? `?afterMessageId=${afterMessageId}&limit=100` : '?limit=100';
     return request(`/api/rooms/${roomId}/messages/sync${query}`, messageSyncSchema, {}, token);
   },
   onlineMembers(token: string, roomId: number) {

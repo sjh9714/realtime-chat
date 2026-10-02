@@ -20,14 +20,18 @@ class DocumentationGuardTest {
     String readme = Files.readString(README);
 
     assertThat(readme)
-        .contains("![실제 Realtime Chat Alice와 Bob 대화 화면]")
-        .contains("docs/assets/architecture/persist-before-broadcast.png")
-        .contains("docs/assets/architecture/persist-before-broadcast.drawio")
-        .contains("그림 transcript:")
-        .contains("## 전환점: 저장되지 않은 메시지를 먼저 보여줄 수 있었다")
-        .contains("## 오프라인과 재연결")
-        .contains("## Redis publish 실패 뒤 복구")
+        .contains("docs/assets/screens/demo-desktop.png")
+        .contains("docs/assets/architecture/request-flow.svg")
+        .contains("그림 설명:")
+        .contains("docs/VERIFICATION.md")
+        .contains("docs/SERVICE_GUIDE.md")
+        .contains("서버 저장 완료")
+        .contains("실시간 최대 ID와 이력 동기화 완료 기준을 분리")
         .doesNotContain("docs/assets/architecture/overall-architecture.svg");
+
+    assertThat(Path.of("docs/assets/screens/demo-desktop.png")).isRegularFile();
+    assertThat(Files.readString(ARCHITECTURE_ASSETS.resolve("request-flow.svg")))
+        .contains("<title", "<desc", "PERSISTED", "화면 수신");
 
     assertThat(readme)
         .contains("현재 성능 주장: 없음")

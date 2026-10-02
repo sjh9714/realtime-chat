@@ -1,0 +1,15 @@
+{
+  "base_commit": "6d69705e8e621e222d458efa64473ddeb5a445a0",
+  "revision": "uncommitted local changes",
+  "tests": {
+    "tests": 104,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "frontend_unit_tests": 14,
+  "e2e_passed": 6,
+  "e2e_excluded_public_mode": 1,
+  "new_load_test": false,
+  "public_demo_boundary_passed": 1
+}

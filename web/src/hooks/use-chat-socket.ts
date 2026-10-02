@@ -52,21 +52,26 @@ export function useChatSocket({
   const syncRoom = useCallback(
     async (roomId: number) => {
       const store = useChatStore.getState();
-      const existing = store.messagesByRoom[roomId] ?? [];
-      const afterMessageId = lastPersistedMessageId(existing);
+      const afterMessageId = store.historyCursorByRoom[roomId];
       try {
-        if (afterMessageId === undefined && existing.length === 0) {
+        if (afterMessageId === undefined) {
           const page = await api.messages(token, roomId);
           store.mergePersistedMessages(roomId, page.messages);
+          store.completeHistorySync(roomId, lastPersistedMessageId(page.messages) ?? 0);
         } else {
           let cursor = afterMessageId;
           let hasMore = true;
           while (hasMore) {
             const response = await api.syncMessages(token, roomId, cursor);
             store.mergePersistedMessages(roomId, response.messages);
-            cursor = response.lastMessageId ?? cursor;
+            const nextCursor = response.lastMessageId ?? cursor;
+            if (response.hasMore && nextCursor <= cursor) {
+              throw new Error('메시지 동기화 기준이 진행되지 않았습니다. 다시 연결해 주세요.');
+            }
+            cursor = nextCursor;
             hasMore = response.hasMore && response.messages.length > 0;
           }
+          store.completeHistorySync(roomId, cursor);
         }
         const online = await api.onlineMembers(token, roomId);
         store.setOnlineMembers(roomId, online);
