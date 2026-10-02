@@ -1,0 +1,288 @@
+diff --git a/src/main/java/com/realtime/chat/bot/ChatBotRules.java b/src/main/java/com/realtime/chat/bot/ChatBotRules.java
+index a6b6aab..fa42b1c 100644
+--- a/src/main/java/com/realtime/chat/bot/ChatBotRules.java
++++ b/src/main/java/com/realtime/chat/bot/ChatBotRules.java
+@@ -63,7 +63,7 @@ public final class ChatBotRules {
+       return "이 방의 참여자는 위 목록에서 확인할 수 있어요. 접속 중인 사람 수는 방 제목 아래에 표시됩니다.";
+     }
+     if (q.contains("전달") || q.contains("저장") || q.startsWith("delivery")) {
+-      return "보낸 메시지는 '보내는 중 → 전송됨 → 전달 완료' 순으로 바뀝니다. 전달 완료는 저장이 끝났다는 뜻이라, 새로고침해도 남아 있어요.";
++      return "보낸 메시지는 '보내는 중 → 서버 접수 → 서버 저장 완료' 순으로 바뀝니다. 서버 저장 완료는 DB에 남았다는 뜻이며 상대방의 수신이나 읽음 확인은 아닙니다.";
+     }
+     if (q.contains("초대") || q.startsWith("invite")) {
+       return "위쪽 '초대 링크 복사'를 눌러 링크를 보내면 상대가 이 대화에 참여합니다. 창을 하나 더 열어 링크를 붙여 넣으면 혼자서도 확인할 수 있어요.";
+diff --git a/src/main/java/com/realtime/chat/controller/DemoSessionController.java b/src/main/java/com/realtime/chat/controller/DemoSessionController.java
+index d82d918..fda0bd2 100644
+--- a/src/main/java/com/realtime/chat/controller/DemoSessionController.java
++++ b/src/main/java/com/realtime/chat/controller/DemoSessionController.java
+@@ -23,7 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
+  * 실시간 전달이 이 제품의 전부인데 방문자는 그걸 한 번도 보지 못했다.
+  *
+  * <p>이제 데모 인물을 <b>돌아가며</b> 내준다. 창을 두 개 열면 서로 다른 사람이 되고,
+- * 같은 그룹 방에서 실제로 대화가 오간다. 그때 보내는 중 → 전송됨 → 전달 완료가
++ * 같은 그룹 방에서 실제로 대화가 오간다. 그때 보내는 중 → 서버 접수 → 서버 저장 완료가
+  * 상대 화면에 실시간으로 도착하는 것을 볼 수 있다.
+  *
+  * <p>무작위가 아니라 순서대로 도는 이유: 무작위면 두 창이 같은 사람이 될 수 있다.
+diff --git a/src/main/java/com/realtime/chat/service/MessageService.java b/src/main/java/com/realtime/chat/service/MessageService.java
+index e1cd22a..8753c71 100644
+--- a/src/main/java/com/realtime/chat/service/MessageService.java
++++ b/src/main/java/com/realtime/chat/service/MessageService.java
+@@ -69,7 +69,8 @@ public class MessageService {
+     if (afterMessageId == null) {
+       messages = new ArrayList<>(messageRepository.findByRoomIdLatest(roomId, fetchSize));
+     } else {
+-      validateAfterMessageId(roomId, afterMessageId);
++      // 0은 이전 조회에서 방이 비어 있었음을 나타내는 시작 기준이다.
++      if (afterMessageId != 0L) validateAfterMessageId(roomId, afterMessageId);
+       messages = messageRepository.findByRoomIdAfterMessageId(roomId, afterMessageId, fetchSize);
+     }
+ 
+diff --git a/src/test/java/com/realtime/chat/MessageIntegrationTest.java b/src/test/java/com/realtime/chat/MessageIntegrationTest.java
+index 447e42f..e5ed4a7 100644
+--- a/src/test/java/com/realtime/chat/MessageIntegrationTest.java
++++ b/src/test/java/com/realtime/chat/MessageIntegrationTest.java
+@@ -201,6 +201,26 @@ class MessageIntegrationTest extends BaseIntegrationTest {
+     assertThat(cappedLimitResponse.getBody().isHasMore()).isTrue();
+   }
+ 
++  @Test
++  @DisplayName("비어 있던 방은 0 기준부터 오래된 순서로 빠짐없이 동기화한다")
++  void syncFromEmptyRoomBaseline() {
++    var messages = saveMessages(5);
++    var first = getWithAuth("/api/rooms/" + room.getId()
++        + "/messages/sync?afterMessageId=0&limit=2", MessageSyncResponse.class, token1);
++    assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
++    assertThat(first.getBody().getMessages()).extracting(MessageResponse::getId)
++        .containsExactly(messages.get(0).getId(), messages.get(1).getId());
++    assertThat(first.getBody().isHasMore()).isTrue();
++    var rest = getWithAuth("/api/rooms/" + room.getId() + "/messages/sync?afterMessageId="
++        + first.getBody().getLastMessageId(), MessageSyncResponse.class, token1);
++    assertThat(rest.getBody().getMessages()).extracting(MessageResponse::getId)
++        .containsExactly(messages.get(2).getId(), messages.get(3).getId(), messages.get(4).getId());
++    assertThat(rest.getBody().isHasMore()).isFalse();
++    assertThat(getWithAuth("/api/rooms/" + room.getId()
++        + "/messages/sync?afterMessageId=0", String.class, token3).getStatusCode())
++        .isEqualTo(HttpStatus.FORBIDDEN);
++  }
++
+   private java.util.List<Message> saveMessages(int count) {
+     java.util.List<Message> messages = new java.util.ArrayList<>();
+     for (int i = 0; i < count; i++) {
+diff --git a/src/test/java/com/realtime/chat/bot/ChatBotRulesTest.java b/src/test/java/com/realtime/chat/bot/ChatBotRulesTest.java
+index ed52085..68a8eb5 100644
+--- a/src/test/java/com/realtime/chat/bot/ChatBotRulesTest.java
++++ b/src/test/java/com/realtime/chat/bot/ChatBotRulesTest.java
+@@ -41,7 +41,7 @@ class ChatBotRulesTest {
+   @DisplayName("슬래시 명령에 답한다")
+   void repliesToCommands() {
+     assertThat(ChatBotRules.replyTo("/도움", false)).get().asString().contains("/상태");
+-    assertThat(ChatBotRules.replyTo("/전달", false)).get().asString().contains("전달 완료");
++    assertThat(ChatBotRules.replyTo("/전달", false)).get().asString().contains("서버 저장 완료", "수신이나 읽음 확인은 아닙니다");
+     assertThat(ChatBotRules.replyTo("/초대", false)).get().asString().contains("초대 링크");
+   }
+ 
+diff --git a/web/e2e/chat-flow.spec.ts b/web/e2e/chat-flow.spec.ts
+index 6a931af..c75896f 100644
+--- a/web/e2e/chat-flow.spec.ts
++++ b/web/e2e/chat-flow.spec.ts
+@@ -1,6 +1,6 @@
+ import AxeBuilder from '@axe-core/playwright';
+ import { Client } from '@stomp/stompjs';
+-import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
++import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page, type WebSocketRoute } from '@playwright/test';
+ import WebSocket from 'ws';
+ 
+ const API_URL = process.env.E2E_API_URL ?? 'http://127.0.0.1:18080';
+@@ -391,8 +391,8 @@ test('둘러보기로 연 두 창은 서로 다른 사람이고 메시지가 실
+   await expect(
+     receiver.page.locator('.message-timeline').getByText(text),
+   ).toBeVisible({ timeout: 15_000 });
+-  // 보낸 쪽은 DB에 남은 뒤에야 '전달 완료'가 된다
+-  await expect(sender.page.locator('.message-row').last()).toContainText('전달 완료');
++  // 보낸 쪽은 DB에 남은 뒤에야 '서버 저장 완료'가 된다
++  await expect(sender.page.locator('.message-row').last()).toContainText('서버 저장 완료');
+ });
+ 
+ test('그룹 대화에는 초대 링크가 있고 1:1에는 없다', async ({ page }) => {
+@@ -444,7 +444,7 @@ test('안내봇은 부를 때만 답하고 BOT으로 표시된다', async ({ pag
+   // 부르면 답한다
+   await page.getByPlaceholder('메시지를 입력하세요').fill('/도움');
+   await page.keyboard.press('Enter');
+-  await expect(page.getByText('/상태 — 지금 이 방의 참여자와 연결 상태')).toBeVisible({
++  await expect(page.locator('.message-timeline').getByText('/상태 — 지금 이 방의 참여자와 연결 상태').last()).toBeVisible({
+     timeout: 15_000,
+   });
+ 
+@@ -455,3 +455,53 @@ test('안내봇은 부를 때만 답하고 BOT으로 표시된다', async ({ pag
+   await page.waitForTimeout(4_000);
+   expect(await page.locator('.message-row').count()).toBe(before + 3);
+ });
++
++
++test('중간 프레임 누락 뒤 더 큰 ID를 수신해도 재접속 이력으로 복구한다', async ({ browser, request }) => {
++  const alice = await signup(request, 'GapSender');
++  const bob = await signup(request, 'GapReceiver');
++  const sender = await authenticatedPage(browser, alice);
++  const roomId = await createDirectRoomThroughUi(sender.page, bob.nickname);
++  const context = await browser.newContext();
++  await context.addInitScript(value => {
++    sessionStorage.setItem('relay-auth', JSON.stringify({ state: { session: value }, version: 0 }));
++  }, bob);
++  const page = await context.newPage();
++  const missingId = crypto.randomUUID();
++  let dropped = 0;
++  let socket: WebSocketRoute | undefined;
++  let upstream: WebSocketRoute | undefined;
++  await page.routeWebSocket('**/ws', route => {
++    socket = route;
++    const server = route.connectToServer();
++    upstream = server;
++    server.onMessage(frame => {
++      if (frame.toString().includes(missingId) && frame.toString().includes('MESSAGE')) {
++        dropped += 1; // 실제 서버가 보낸 한 메시지만 받는 브라우저에서 버린다.
++        return;
++      }
++      route.send(frame);
++    });
++  });
++  await page.goto('/');
++  await expect(page.getByRole('heading', { name: alice.nickname })).toBeVisible();
++  await expect(page.locator('.conversation-header p').first()).toContainText('명 온라인');
++  const raw = await connectStomp(alice.token, ALICE_NODE_WS_URL);
++  const prefix = `gap-${Date.now()}`;
++  try {
++    publish(raw.client, roomId, `${prefix}-missing`, missingId);
++    await expect.poll(() => dropped).toBe(1);
++    publish(raw.client, roomId, `${prefix}-later`, crypto.randomUUID());
++    await expect(messageArticle(page, `${prefix}-later`)).toHaveCount(1);
++    expect(await messageArticle(page, `${prefix}-missing`).count()).toBe(0);
++    await socket!.close({ code: 1001, reason: 'reconnect verification' });
++    await upstream!.close();
++    await expect(messageArticle(page, `${prefix}-missing`)).toHaveCount(1);
++    await expect(messageArticle(page, `${prefix}-later`)).toHaveCount(1);
++    await expect(messageArticle(page, `${prefix}-missing`)).toHaveAttribute('data-status', 'PERSISTED');
++  } finally {
++    await raw.client.deactivate();
++    await context.close();
++    await sender.context.close();
++  }
++});
+diff --git a/web/src/api.ts b/web/src/api.ts
+index a70f519..4d3ed42 100644
+--- a/web/src/api.ts
++++ b/web/src/api.ts
+@@ -116,7 +116,7 @@ export const api = {
+     return request(`/api/rooms/${roomId}/messages?size=50`, messagePageSchema, {}, token);
+   },
+   syncMessages(token: string, roomId: number, afterMessageId?: number) {
+-    const query = afterMessageId ? `?afterMessageId=${afterMessageId}&limit=100` : '?limit=100';
++    const query = afterMessageId !== undefined ? `?afterMessageId=${afterMessageId}&limit=100` : '?limit=100';
+     return request(`/api/rooms/${roomId}/messages/sync${query}`, messageSyncSchema, {}, token);
+   },
+   onlineMembers(token: string, roomId: number) {
+diff --git a/web/src/components/DeliveryBadge.tsx b/web/src/components/DeliveryBadge.tsx
+index de8feb8..aaeb550 100644
+--- a/web/src/components/DeliveryBadge.tsx
++++ b/web/src/components/DeliveryBadge.tsx
+@@ -4,25 +4,11 @@ interface DeliveryBadgeProps {
+   status: DeliveryStatus;
+ }
+ 
+-/**
+- * 이 앱의 주장이 여기 있다 — "화면에 보였다"와 "실제 저장됐다"는 다르다.
+- *
+- * 점과 글자를 함께 둔다. 색만으로 말하면 색각 이상이 있는 사람에게는 아무 정보가 아니고,
+- * 점이 작아 안 보이는 화면에서도 글자가 남는다(DESIGN.md 접근성).
+- *
+- * 점 자체는 `aria-hidden`이다. 화면 낭독기에는 글자만 한 번 읽히면 된다.
+- */
+-/*
+- * 낱말은 제품의 것으로 쓴다. '큐 접수'와 '저장됨'은 엔지니어의 말이다 —
+- * 쓰는 사람은 큐가 뭔지 알 이유가 없다.
+- *
+- * **구분 자체는 그대로다.** 받아들여진 것과 실제로 남은 것은 여전히 다른 상태이고,
+- * 그게 이 제품의 알맹이다. 바뀐 것은 이름뿐이다.
+- */
++// 저장 확인은 상대방의 수신·읽음 확인과 다르다.
+ const labels: Record<DeliveryStatus, string> = {
+   SENDING: '보내는 중',
+-  ACCEPTED: '전송됨',
+-  PERSISTED: '전달 완료',
++  ACCEPTED: '서버 접수',
++  PERSISTED: '서버 저장 완료',
+   FAILED: '실패',
+ };
+ 
+diff --git a/web/src/hooks/use-chat-socket.ts b/web/src/hooks/use-chat-socket.ts
+index 3b1ae9b..edf0502 100644
+--- a/web/src/hooks/use-chat-socket.ts
++++ b/web/src/hooks/use-chat-socket.ts
+@@ -52,21 +52,26 @@ export function useChatSocket({
+   const syncRoom = useCallback(
+     async (roomId: number) => {
+       const store = useChatStore.getState();
+-      const existing = store.messagesByRoom[roomId] ?? [];
+-      const afterMessageId = lastPersistedMessageId(existing);
++      const afterMessageId = store.historyCursorByRoom[roomId];
+       try {
+-        if (afterMessageId === undefined && existing.length === 0) {
++        if (afterMessageId === undefined) {
+           const page = await api.messages(token, roomId);
+           store.mergePersistedMessages(roomId, page.messages);
++          store.completeHistorySync(roomId, lastPersistedMessageId(page.messages) ?? 0);
+         } else {
+           let cursor = afterMessageId;
+           let hasMore = true;
+           while (hasMore) {
+             const response = await api.syncMessages(token, roomId, cursor);
+             store.mergePersistedMessages(roomId, response.messages);
+-            cursor = response.lastMessageId ?? cursor;
++            const nextCursor = response.lastMessageId ?? cursor;
++            if (response.hasMore && nextCursor <= cursor) {
++              throw new Error('메시지 동기화 기준이 진행되지 않았습니다. 다시 연결해 주세요.');
++            }
++            cursor = nextCursor;
+             hasMore = response.hasMore && response.messages.length > 0;
+           }
++          store.completeHistorySync(roomId, cursor);
+         }
+         const online = await api.onlineMembers(token, roomId);
+         store.setOnlineMembers(roomId, online);
+diff --git a/web/src/stores/chat-store.ts b/web/src/stores/chat-store.ts
+index 647b93e..fd3ded6 100644
+--- a/web/src/stores/chat-store.ts
++++ b/web/src/stores/chat-store.ts
+@@ -11,6 +11,8 @@ interface ChatState {
+   selectedRoomId: number | null;
+   connectionStatus: ConnectionStatus;
+   messagesByRoom: Record<number, ChatMessage[]>;
++  historyCursorByRoom: Record<number, number>;
++  completeHistorySync: (roomId: number, cursor: number) => void;
+   onlineByRoom: Record<number, number[]>;
+   connectionNotice: string | null;
+   selectRoom: (roomId: number | null) => void;
+@@ -67,8 +69,15 @@ export const useChatStore = create<ChatState>((set) => ({
+   selectedRoomId: null,
+   connectionStatus: 'OFFLINE',
+   messagesByRoom: {},
++  historyCursorByRoom: {},
+   onlineByRoom: {},
+   connectionNotice: null,
++  completeHistorySync: (roomId, cursor) => set((state) => ({
++    historyCursorByRoom: {
++      ...state.historyCursorByRoom,
++      [roomId]: Math.max(state.historyCursorByRoom[roomId] ?? 0, cursor),
++    },
++  })),
+   selectRoom: (selectedRoomId) => set({ selectedRoomId }),
+   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
+   setConnectionNotice: (connectionNotice) => set({ connectionNotice }),
+@@ -138,6 +147,7 @@ export const useChatStore = create<ChatState>((set) => ({
+       selectedRoomId: null,
+       connectionStatus: 'OFFLINE',
+       messagesByRoom: {},
++      historyCursorByRoom: {},
+       onlineByRoom: {},
+       connectionNotice: null,
+     }),

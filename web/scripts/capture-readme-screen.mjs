@@ -81,7 +81,7 @@ try {
 
   // 배지가 ACCEPTED에서 PERSISTED로 넘어갈 때까지 기다린다.
   // 넘어가기 전에 찍으면 이 앱이 말하려는 것과 반대의 화면이 남는다.
-  await aPage.getByText("저장됨").last().waitFor();
+  await aPage.getByText("서버 저장 완료", { exact: true }).last().waitFor();
   await aPage.waitForTimeout(400);
 
   await mkdir(OUT, { recursive: true });

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { Client } from '@stomp/stompjs';
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page, type WebSocketRoute } from '@playwright/test';
 import WebSocket from 'ws';
 
 const API_URL = process.env.E2E_API_URL ?? 'http://127.0.0.1:18080';
@@ -391,8 +391,8 @@ test('둘러보기로 연 두 창은 서로 다른 사람이고 메시지가 실
   await expect(
     receiver.page.locator('.message-timeline').getByText(text),
   ).toBeVisible({ timeout: 15_000 });
-  // 보낸 쪽은 DB에 남은 뒤에야 '전달 완료'가 된다
-  await expect(sender.page.locator('.message-row').last()).toContainText('전달 완료');
+  // 보낸 쪽은 DB에 남은 뒤에야 '서버 저장 완료'가 된다
+  await expect(sender.page.locator('.message-row').last()).toContainText('서버 저장 완료');
 });
 
 test('그룹 대화에는 초대 링크가 있고 1:1에는 없다', async ({ page }) => {
@@ -444,7 +444,7 @@ test('안내봇은 부를 때만 답하고 BOT으로 표시된다', async ({ pag
   // 부르면 답한다
   await page.getByPlaceholder('메시지를 입력하세요').fill('/도움');
   await page.keyboard.press('Enter');
-  await expect(page.getByText('/상태 — 지금 이 방의 참여자와 연결 상태')).toBeVisible({
+  await expect(page.locator('.message-timeline').getByText('/상태 — 지금 이 방의 참여자와 연결 상태').last()).toBeVisible({
     timeout: 15_000,
   });
 
@@ -454,4 +454,54 @@ test('안내봇은 부를 때만 답하고 BOT으로 표시된다', async ({ pag
    */
   await page.waitForTimeout(4_000);
   expect(await page.locator('.message-row').count()).toBe(before + 3);
+});
+
+
+test('중간 프레임 누락 뒤 더 큰 ID를 수신해도 재접속 이력으로 복구한다', async ({ browser, request }) => {
+  const alice = await signup(request, 'GapSender');
+  const bob = await signup(request, 'GapReceiver');
+  const sender = await authenticatedPage(browser, alice);
+  const roomId = await createDirectRoomThroughUi(sender.page, bob.nickname);
+  const context = await browser.newContext();
+  await context.addInitScript(value => {
+    sessionStorage.setItem('relay-auth', JSON.stringify({ state: { session: value }, version: 0 }));
+  }, bob);
+  const page = await context.newPage();
+  const missingId = crypto.randomUUID();
+  let dropped = 0;
+  let socket: WebSocketRoute | undefined;
+  let upstream: WebSocketRoute | undefined;
+  await page.routeWebSocket('**/ws', route => {
+    socket = route;
+    const server = route.connectToServer();
+    upstream = server;
+    server.onMessage(frame => {
+      if (frame.toString().includes(missingId) && frame.toString().includes('MESSAGE')) {
+        dropped += 1; // 실제 서버가 보낸 한 메시지만 받는 브라우저에서 버린다.
+        return;
+      }
+      route.send(frame);
+    });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: alice.nickname })).toBeVisible();
+  await expect(page.locator('.conversation-header p').first()).toContainText('명 온라인');
+  const raw = await connectStomp(alice.token, ALICE_NODE_WS_URL);
+  const prefix = `gap-${Date.now()}`;
+  try {
+    publish(raw.client, roomId, `${prefix}-missing`, missingId);
+    await expect.poll(() => dropped).toBe(1);
+    publish(raw.client, roomId, `${prefix}-later`, crypto.randomUUID());
+    await expect(messageArticle(page, `${prefix}-later`)).toHaveCount(1);
+    expect(await messageArticle(page, `${prefix}-missing`).count()).toBe(0);
+    await socket!.close({ code: 1001, reason: 'reconnect verification' });
+    await upstream!.close();
+    await expect(messageArticle(page, `${prefix}-missing`)).toHaveCount(1);
+    await expect(messageArticle(page, `${prefix}-later`)).toHaveCount(1);
+    await expect(messageArticle(page, `${prefix}-missing`)).toHaveAttribute('data-status', 'PERSISTED');
+  } finally {
+    await raw.client.deactivate();
+    await context.close();
+    await sender.context.close();
+  }
 });

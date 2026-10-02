@@ -41,7 +41,7 @@ class ChatBotRulesTest {
   @DisplayName("슬래시 명령에 답한다")
   void repliesToCommands() {
     assertThat(ChatBotRules.replyTo("/도움", false)).get().asString().contains("/상태");
-    assertThat(ChatBotRules.replyTo("/전달", false)).get().asString().contains("전달 완료");
+    assertThat(ChatBotRules.replyTo("/전달", false)).get().asString().contains("서버 저장 완료", "수신이나 읽음 확인은 아닙니다");
     assertThat(ChatBotRules.replyTo("/초대", false)).get().asString().contains("초대 링크");
   }
 

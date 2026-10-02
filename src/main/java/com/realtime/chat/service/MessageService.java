@@ -69,7 +69,8 @@ public class MessageService {
     if (afterMessageId == null) {
       messages = new ArrayList<>(messageRepository.findByRoomIdLatest(roomId, fetchSize));
     } else {
-      validateAfterMessageId(roomId, afterMessageId);
+      // 0은 이전 조회에서 방이 비어 있었음을 나타내는 시작 기준이다.
+      if (afterMessageId != 0L) validateAfterMessageId(roomId, afterMessageId);
       messages = messageRepository.findByRoomIdAfterMessageId(roomId, afterMessageId, fetchSize);
     }
 

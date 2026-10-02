@@ -1,0 +1,8 @@
+{
+  "capturedAt": "2026-10-02",
+  "conditions": "실제 로컬 demo 프로필. web/scripts/capture-readme-screen.mjs가 생성한 두 합성 계정의 대화. 메시지 저장 배지는 실제 서버 응답.",
+  "sha256": {
+    "screens/demo-desktop.png": "f9a687c585d5fc95741197cd63d3d8d35797827205d27e3b730f3db23df0b066",
+    "architecture/request-flow.svg": "81c9d1a11fec2a7456d20eb61994cb54601c906eeb51131ee885284e1a96ac61"
+  }
+}

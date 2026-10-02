@@ -201,6 +201,26 @@ class MessageIntegrationTest extends BaseIntegrationTest {
     assertThat(cappedLimitResponse.getBody().isHasMore()).isTrue();
   }
 
+  @Test
+  @DisplayName("비어 있던 방은 0 기준부터 오래된 순서로 빠짐없이 동기화한다")
+  void syncFromEmptyRoomBaseline() {
+    var messages = saveMessages(5);
+    var first = getWithAuth("/api/rooms/" + room.getId()
+        + "/messages/sync?afterMessageId=0&limit=2", MessageSyncResponse.class, token1);
+    assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(first.getBody().getMessages()).extracting(MessageResponse::getId)
+        .containsExactly(messages.get(0).getId(), messages.get(1).getId());
+    assertThat(first.getBody().isHasMore()).isTrue();
+    var rest = getWithAuth("/api/rooms/" + room.getId() + "/messages/sync?afterMessageId="
+        + first.getBody().getLastMessageId(), MessageSyncResponse.class, token1);
+    assertThat(rest.getBody().getMessages()).extracting(MessageResponse::getId)
+        .containsExactly(messages.get(2).getId(), messages.get(3).getId(), messages.get(4).getId());
+    assertThat(rest.getBody().isHasMore()).isFalse();
+    assertThat(getWithAuth("/api/rooms/" + room.getId()
+        + "/messages/sync?afterMessageId=0", String.class, token3).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
+  }
+
   private java.util.List<Message> saveMessages(int count) {
     java.util.List<Message> messages = new java.util.ArrayList<>();
     for (int i = 0; i < count; i++) {
