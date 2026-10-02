@@ -15,29 +15,31 @@ class DocumentationGuardTest {
   private static final Path ARCHITECTURE_ASSETS = Path.of("docs", "assets", "architecture");
 
   @Test
-  @DisplayName("README는 실제 제품 화면과 현재 메시지 생명주기 evidence 경계를 유지한다")
+  @DisplayName("README는 서비스를 소개하고 개발 문서는 메시지 처리와 검증 범위를 설명한다")
   void readmeKeepsProductStoryAndEvidenceBoundaries() throws IOException {
     String readme = Files.readString(README);
 
     assertThat(readme)
         .contains("docs/assets/screens/demo-desktop.png")
-        .contains("docs/assets/architecture/request-flow.svg")
-        .contains("그림 설명:")
         .contains("docs/VERIFICATION.md")
         .contains("docs/SERVICE_GUIDE.md")
         .contains("서버 저장 완료")
-        .contains("실시간 최대 ID와 이력 동기화 완료 기준을 분리")
         .doesNotContain("docs/assets/architecture/overall-architecture.svg");
+
+    assertThat(Files.readString(Path.of("docs/SERVICE_GUIDE.md")))
+        .contains("assets/architecture/request-flow.svg", "그림 설명:")
+        .contains("historyCursorByRoom", "실시간 메시지와 저장 ACK는 이 기준을 변경하지 않습니다");
 
     assertThat(Path.of("docs/assets/screens/demo-desktop.png")).isRegularFile();
     assertThat(Files.readString(ARCHITECTURE_ASSETS.resolve("request-flow.svg")))
         .contains("<title", "<desc", "PERSISTED", "화면 수신");
 
-    assertThat(readme)
+    assertThat(Files.readString(Path.of("docs/ARCHITECTURE.md")))
         .contains("현재 성능 주장: 없음")
-        .contains("historical unpinned archive")
-        .contains("docker-compose.demo.yml -f docker-compose.e2e.yml")
-        .doesNotContain(
+        .contains("historical unpinned archive");
+    assertThat(Files.readString(Path.of("docs/TESTING.md")))
+        .contains("docker-compose.demo.yml -f docker-compose.e2e.yml");
+    assertThat(readme).doesNotContain(
             "937 -> 1,598",
             "212.85ms -> 149.22ms",
             "expected 99,900",
