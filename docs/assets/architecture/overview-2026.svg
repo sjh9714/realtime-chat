@@ -13,7 +13,7 @@
     .m{fill:#9aa0b0;font:11px ui-monospace,Menlo,monospace}
     .ln{stroke:#8a90a3;stroke-width:1.5;fill:none}
   </style>
-  <text x="24" y="36" class="m">persist-before-broadcast — 커밋 전에는 브로드캐스트하지 않는다</text>
+  <text x="24" y="36" class="m">persist-before-broadcast: 커밋 전에는 브로드캐스트하지 않는다</text>
 
   <rect x="24" y="64" width="130" height="56" rx="10" class="box"/>
   <text x="89" y="88" text-anchor="middle" class="t">발신 클라이언트</text>

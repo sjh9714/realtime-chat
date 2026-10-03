@@ -53,14 +53,14 @@ public class DemoDataConfig {
    *
    * <p>전에는 말하는 사람을 참여자 순서대로 돌아가며 정했다. 그래서 한 사람이 두 번 이어
    * 말하는 일이 한 번도 없었고, <b>화면의 연속 메시지 묶기가 한 번도 발동하지 않았다.</b>
-   * 실제 대화는 그렇지 않다 — 한 사람이 짧은 말을 이어 붙인다.
+   * 실제 대화는 그렇지 않다. 한 사람이 짧은 말을 이어 붙인다.
    */
   private record Line(int speaker, String text) {}
 
   /**
    * 한 대화의 대본.
    *
-   * @param members 참여자 이메일 — 닉네임은 유일성이 보장되지 않는다
+   * @param members 참여자 이메일: 닉네임은 유일성이 보장되지 않는다
    */
   private record Script(String name, RoomType type, List<String> members, List<Line> lines) {}
 
@@ -92,7 +92,7 @@ public class DemoDataConfig {
   /**
    * 그룹 방에는 안내봇도 들어간다.
    *
-   * <p>봇은 {@link #PERSONAS}에 넣지 않는다 — 둘러보기가 내주는 것은 사람이어야 한다.
+   * <p>봇은 {@link #PERSONAS}에 넣지 않는다. 둘러보기가 내주는 것은 사람이어야 한다.
    * 방문자가 봇으로 로그인되면 이상하다.
    */
   private static final List<String> EVERYONE_WITH_BOT =
@@ -185,7 +185,7 @@ public class DemoDataConfig {
       ChatRoomMemberSeeder seeder,
       PasswordEncoder passwordEncoder) {
     return arguments -> {
-      // 사람보다 먼저 만든다 — 방 참여자 목록이 봇을 찾을 수 있어야 한다
+      // 사람보다 먼저 만든다. 방 참여자 목록이 봇을 찾을 수 있어야 한다
       seedBot(users, passwordEncoder);
       seedUser(users, passwordEncoder, "jiwon@demo.local", "지원");
       seedUser(users, passwordEncoder, "taeho@demo.local", "태호");
@@ -201,7 +201,7 @@ public class DemoDataConfig {
    * 안내봇 계정.
    *
    * <p>{@code bot = true}라서 화면이 이름 옆에 BOT 배지를 그린다. 사람인 척하지 않는다.
-   * 비밀번호는 사람과 같은 방식으로 넣지만 아무도 이 계정으로 로그인하지 않는다 —
+   * 비밀번호는 사람과 같은 방식으로 넣지만 아무도 이 계정으로 로그인하지 않는다.
    * 둘러보기는 {@link #PERSONAS}에서만 고른다.
    */
   private void seedBot(UserRepository users, PasswordEncoder encoder) {
@@ -229,7 +229,7 @@ public class DemoDataConfig {
   }
 
   /**
-   * 대화 시드. 트랜잭션이 필요해 별도 빈으로 둔다 —
+   * 대화 시드. 트랜잭션이 필요해 별도 빈으로 둔다.
    * 같은 클래스 안에서 부르면 {@code @Transactional}이 걸리지 않는다.
    */
   @Bean
@@ -250,7 +250,7 @@ public class DemoDataConfig {
         UserRepository users, ChatRoomRepository rooms, MessageRepository messages) {
       /*
        * app instance가 둘이라 둘 다 이 코드를 돈다. count()만 보고 판단하면
-       * 둘 다 0을 보고 둘 다 시드해서 방이 두 벌 생긴다 — 실제로 그렇게 됐다.
+       * 둘 다 0을 보고 둘 다 시드해서 방이 두 벌 생긴다. 실제로 그렇게 됐다.
        *
        * 트랜잭션 자문 잠금으로 한 번에 하나만 들어오게 하고, 잠금을 잡은 뒤에 다시 센다.
        * 잠금은 트랜잭션이 끝나면 풀린다.
@@ -289,7 +289,7 @@ public class DemoDataConfig {
          * 방과 참여 시각도 함께 과거로 옮긴다.
          *
          * 메시지만 과거로 보내면 "참여 이전 메시지는 읽음 기준으로 사용할 수 없습니다"로
-         * 읽음 처리가 400이 된다. 앱의 규칙이 맞다 — 들어오기 전 메시지를 읽었다고
+         * 읽음 처리가 400이 된다. 앱의 규칙이 맞다. 들어오기 전 메시지를 읽었다고
          * 표시할 수는 없다. 시드가 만든 시간이 앞뒤가 안 맞았던 것이다.
          */
         LocalDateTime opened = cursor.minusMinutes(5);

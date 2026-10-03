@@ -59,7 +59,7 @@ node scripts/ws-delivery-runner.mjs \
   --out-dir artifacts/ws/20260522-122919-receiver-matrix-status-lowrate
 ```
 
-### 도구 검산 snapshot — 공개 지표 금지
+### 도구 검산 snapshot: 공개 지표 금지
 
 아래 내용은 작은 local smoke에서 runner가 expected/actual delivery 분모와 send status 분모를
 분리해 계산할 수 있음을 확인한 qualitative summary입니다. 이 구간의 raw percentile과 completeness

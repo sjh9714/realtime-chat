@@ -1,7 +1,7 @@
-# 전달 완전성 재측정 — 50명 · 두 노드 · 3회 반복 (2026-08-08)
+# 전달 완전성 재측정: 50명 · 두 노드 · 3회 반복 (2026-08-08)
 
 직전 기록(`receiver-matrix-50users-repeat3-20260807-summary.json`, commit `18e7189`) 이후
-**같은 Kafka 토픽 `chat.messages`를 읽는 컨슈머 그룹이 하나 늘었습니다** — 안내봇(`chat-bot`).
+**같은 Kafka 토픽 `chat.messages`를 읽는 컨슈머 그룹이 하나 늘었습니다.** 안내봇(`chat-bot`).
 전달 경로가 바뀌었으므로 현재 커밋에서 다시 측정한 기록입니다.
 
 ## 커밋과 환경
@@ -16,7 +16,7 @@
 | Redis | `redis:7-alpine` |
 | Kafka | `apache/kafka:3.9.0` (KRaft) |
 | 애플리케이션 | Spring Boot 3.4.3 · Java 21 · **인스턴스 2대** (`app-1`, `app-2`) |
-| 게이트웨이 | nginx `localhost:18080` — `/ws/app-1`, `/ws/app-2`로 노드 고정 |
+| 게이트웨이 | nginx `localhost:18080`: `/ws/app-1`, `/ws/app-2`로 노드 고정 |
 | 러너 | `scripts/ws-delivery-runner.mjs` (Node v22.23.1, 호스트 실행) |
 | 컨슈머 그룹 | `chat-persistence` · `chat-read-receipt` · **`chat-bot`** |
 
@@ -57,7 +57,7 @@ node scripts/validate-delivery-evidence.mjs --artifact-dir <out>/run{N}
 | 2 | 4,900 | 4,900 | 0 | 0 | 0 | 100% |
 | 3 | 4,900 | 4,900 | 0 | 0 | 0 | 100% |
 
-순서 위반 — 보낸 사람 기준, 그리고 DB가 발급한 `messageId` 기준 둘 다 봤습니다.
+순서 위반: 보낸 사람 기준, 그리고 DB가 발급한 `messageId` 기준 둘 다 봤습니다.
 
 | run | sender-local 위반 | room-global 위반 | 비교 가능 건수 |
 | --- | ---: | ---: | ---: |
@@ -65,7 +65,7 @@ node scripts/validate-delivery-evidence.mjs --artifact-dir <out>/run{N}
 | 2 | 0 | 0 | 4,900 |
 | 3 | 0 | 0 | 4,900 |
 
-보낸 것의 상태 — 세 run 모두 같았습니다.
+보낸 것의 상태: 세 run 모두 같았습니다.
 
 | 항목 | 값 |
 | --- | ---: |
@@ -98,5 +98,5 @@ send → receive 지연(ms). **성능 수치가 아니라 시나리오가 정상
 시나리오 근거입니다. 러너도 같은 호스트에서 돕니다. 공개 벤치마크나 운영 성능 주장이 아닙니다.
 지연 수치는 네트워크가 없는 환경의 값이라 그대로 옮겨 쓸 수 없습니다.
 
-SUBSCRIBE receipt는 장벽으로 쓰지 않았습니다 — Spring simple broker가 receipt를 돌려주지
+SUBSCRIBE receipt는 장벽으로 쓰지 않았습니다. Spring simple broker가 receipt를 돌려주지
 않기 때문입니다. 대신 `CONNECTED` 확인 뒤 250ms를 두고 보내기를 시작했습니다.

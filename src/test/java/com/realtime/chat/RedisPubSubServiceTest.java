@@ -159,7 +159,7 @@ class RedisPubSubServiceTest {
         20L,
         10L,
         "sender",
-        false, // senderBot — 사람이 보낸 것
+        false, // senderBot: 사람이 보낸 것
         "hello",
         MessageType.TEXT,
         MessagePublishStatus.PERSISTED,

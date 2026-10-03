@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>하루 두 번, 참여 중인 그룹 방에 한 줄씩 남긴다. 실제 업무 메신저의 알림봇이 하는 일이다.
  *
  * <p><b>인스턴스가 2대라 타이머도 2벌 돈다.</b> 그대로 두면 공지가 두 번 올라간다.
- * {@code pg_advisory_xact_lock}으로 한 트랜잭션만 들어오게 막는다 —
+ * {@code pg_advisory_xact_lock}으로 한 트랜잭션만 들어오게 막는다.
  * {@code DemoDataConfig}가 데모 시드에서 쓰는 것과 같은 방식이다.
  *
  * <p>잠금을 잡은 뒤 <b>오늘 이미 보냈는지 다시 센다.</b> 잠금만으로는 재시작·재배포 때
@@ -57,13 +57,13 @@ public class ChatBotScheduler {
     this.jdbc = jdbc;
   }
 
-  /** 스탠드업 알림 — 평일 09:30 */
+  /** 스탠드업 알림: 평일 09:30 */
   @Scheduled(cron = "0 30 9 * * MON-FRI", zone = "Asia/Seoul")
   public void standupReminder() {
     post("standup", "스탠드업 시작 10분 전입니다. 오늘 할 일을 한 줄로 남겨 주세요.");
   }
 
-  /** 마감 정리 — 평일 18:00 */
+  /** 마감 정리: 평일 18:00 */
   @Scheduled(cron = "0 0 18 * * MON-FRI", zone = "Asia/Seoul")
   public void wrapUpReminder() {
     post("wrapup", "오늘 하루 수고하셨습니다. 넘길 일이 있으면 이 방에 남겨 주세요.");

@@ -124,7 +124,7 @@ export function AuthScreen() {
           </button>
           {/*
             둘러보기는 로그인 양식 뒤에 선다. 전에는 같은 크기의 버튼이라 데모 장치가
-            먼저 보였다 — 실제 서비스의 로그인 화면은 그렇지 않다.
+            먼저 보였다. 실제 서비스의 로그인 화면은 그렇지 않다.
           */}
           {DEMO_MODE && (
             <p className="auth-secondary">
@@ -140,7 +140,7 @@ export function AuthScreen() {
           )}
           {/*
             누구나 가입할 수 있으니 진짜 계정으로 오해하지 않도록 한 줄 남긴다.
-            이건 제품 설명이 아니라 고지다 — 다만 눈에 띄지 않게 양식 아래에 둔다.
+            이건 제품 설명이 아니라 고지다. 다만 눈에 띄지 않게 양식 아래에 둔다.
           */}
           {DEMO_MODE && <p className="auth-note">테스트 환경입니다. 대화 내용은 예고 없이 초기화될 수 있습니다.</p>}
           <p className="form-error" role="alert">

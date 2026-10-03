@@ -13,7 +13,7 @@ export function ChatShell() {
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  // ⌘K / Ctrl+K. 입력창에 있을 때도 열려야 한다 — 방을 바꾸려고 손을 떼는 일이 없어야 하는 게
+  // ⌘K / Ctrl+K. 입력창에 있을 때도 열려야 한다. 방을 바꾸려고 손을 떼는 일이 없어야 하는 게
   // 이 기능의 요점이다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -50,7 +50,7 @@ export function ChatShell() {
   /*
    * 초대 링크(`?join=12`)를 타고 들어온 경우.
    *
-   * 이미 참여 중이면 서버가 409를 주는데 그건 실패가 아니다 — 방을 열어 주면 된다.
+   * 이미 참여 중이면 서버가 409를 주는데 그건 실패가 아니다. 방을 열어 주면 된다.
    * 어느 쪽이든 목록을 다시 받아야 새 방이 사이드바에 뜬다.
    */
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -175,7 +175,7 @@ function ConnectedChatShell({
           {/*
             사용자 id를 보여주지 않는다. 메신저에서 내 계정 번호는 알 이유가 없는 값이다.
             여기 있던 'How it stays correct' 서랍(DB transaction·optimistic 전송 설명)도
-            지웠다 — 제품 안에 제품 설명서를 넣지 않는다.
+            지웠다. 제품 안에 제품 설명서를 넣지 않는다.
           */}
           <p>
             <strong>{currentUser.nickname}</strong>

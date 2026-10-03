@@ -190,7 +190,7 @@ test('demo is one-click, strict-headered, accessible, and keyboard operable', as
 
   await page.getByRole('button', { name: '가입하지 않고 둘러보기' }).click();
   /*
-   * 둘러보기는 데모 인물을 돌아가며 내준다 — 누가 될지 정해져 있지 않다.
+   * 둘러보기는 데모 인물을 돌아가며 내준다. 누가 될지 정해져 있지 않다.
    * 전에는 무조건 Alice였고, 그래서 창을 두 개 열어도 둘 다 같은 사람이라
    * 메시지를 주고받을 수 없었다. 여기서는 "누군가로 들어와졌다"만 본다.
    */
@@ -206,7 +206,7 @@ test('demo is one-click, strict-headered, accessible, and keyboard operable', as
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('제품팀 스탠드업');
   await assertNoSeriousAxeViolations(page);
 
-  // 날짜 구분선과 연속 메시지 묶기 — 메신저의 관례가 실제로 그려지는지
+  // 날짜 구분선과 연속 메시지 묶기: 메신저의 관례가 실제로 그려지는지
   await expect(page.locator('.day-divider')).not.toHaveCount(0);
   await expect(page.locator('.message-row.is-run')).not.toHaveCount(0);
   // 이어지는 줄은 이름을 반복하지 않는다
@@ -355,7 +355,7 @@ test('Alice creates a room and app-1 delivers to app-2 exactly once across recov
  * 둘 다 같은 사람이었다. 실시간 전달이 이 제품의 전부인데 방문자는 그걸 한 번도 보지
  * 못했고, 그래서 "실제 서비스가 아니라 보여주기 식"으로 읽혔다.
  *
- * 이제 인물을 돌아가며 내준다. 이 테스트는 그 약속을 지킨다 —
+ * 이제 인물을 돌아가며 내준다. 이 테스트는 그 약속을 지킨다.
  * 두 창이 서로 다른 사람이고, 한쪽에서 보낸 것이 다른 쪽에 도착한다.
  */
 test('둘러보기로 연 두 창은 서로 다른 사람이고 메시지가 실제로 오간다', async ({ browser }) => {
@@ -376,7 +376,7 @@ test('둘러보기로 연 두 창은 서로 다른 사람이고 메시지가 실
 
   /*
    * 받는 쪽의 구독이 설 때까지 기다린다. 열자마자 보내면 구독 전이라 밀려 오지 않고
-   * 재접속 보충 조회로만 채워진다 — 실시간으로 도착하는지를 보려면 기다려야 한다.
+   * 재접속 보충 조회로만 채워진다. 실시간으로 도착하는지를 보려면 기다려야 한다.
    */
   await expect(receiver.page.locator('.conversation-header p').first()).toContainText('명 온라인');
 
@@ -420,7 +420,7 @@ test('그룹 대화에는 초대 링크가 있고 1:1에는 없다', async ({ pa
  * 안내봇.
  *
  * 혼자 창 하나만 연 사람에게도 무언가 일어나야 한다는 게 이 기능의 이유다.
- * 동시에 **아무 말에나 답하면 안 된다** — 방문자가 떠난 뒤에도 데모 데이터가 불어난다.
+ * 동시에 **아무 말에나 답하면 안 된다.** 방문자가 떠난 뒤에도 데모 데이터가 불어난다.
  */
 test('안내봇은 부를 때만 답하고 BOT으로 표시된다', async ({ page }) => {
   await page.goto('/');
@@ -429,7 +429,7 @@ test('안내봇은 부를 때만 답하고 BOT으로 표시된다', async ({ pag
   await page.getByRole('button', { name: /제품팀 스탠드업/ }).click();
   await page.locator('.message-row').first().waitFor();
 
-  // 사람인 척하지 않는다 — 시드에 남은 봇 공지에 배지가 있다
+  // 사람인 척하지 않는다. 시드에 남은 봇 공지에 배지가 있다
   await expect(page.locator('.message-sender', { has: page.locator('.bot-badge') }).first())
     .toContainText('안내봇');
 
@@ -444,13 +444,13 @@ test('안내봇은 부를 때만 답하고 BOT으로 표시된다', async ({ pag
   // 부르면 답한다
   await page.getByPlaceholder('메시지를 입력하세요').fill('/도움');
   await page.keyboard.press('Enter');
-  await expect(page.locator('.message-timeline').getByText('/상태 — 지금 이 방의 참여자와 연결 상태').last()).toBeVisible({
+  await expect(page.locator('.message-timeline').getByText('/상태: 지금 이 방의 참여자와 연결 상태').last()).toBeVisible({
     timeout: 15_000,
   });
 
   /*
    * 인스턴스가 2대라 여기가 제일 틀리기 쉽다. 저장 컨슈머와 다른 그룹으로 붙였으니
-   * 한 대만 처리해야 한다 — 답이 하나여야 한다.
+   * 한 대만 처리해야 한다. 답이 하나여야 한다.
    */
   await page.waitForTimeout(4_000);
   expect(await page.locator('.message-row').count()).toBe(before + 3);

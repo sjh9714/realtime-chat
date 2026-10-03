@@ -12,8 +12,8 @@
       "ws://localhost:18080/ws/app-2"
     ]
   },
-  "barrier": "CONNECTED 확인 + 250ms settle (문서 기본값). SUBSCRIBE receipt 장벽은 쓰지 않았다 — Spring simple broker가 receipt를 돌려주지 않는다.",
-  "validator": "scripts/validate-delivery-evidence.mjs — 3개 run 모두 통과",
+  "barrier": "CONNECTED 확인 + 250ms settle (문서 기본값). SUBSCRIBE receipt 장벽은 쓰지 않았다. Spring simple broker가 receipt를 돌려주지 않는다.",
+  "validator": "scripts/validate-delivery-evidence.mjs: 3개 run 모두 통과",
   "runs": [
     {
       "run": 1,

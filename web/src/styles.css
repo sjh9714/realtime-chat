@@ -30,7 +30,7 @@
   --text-3: #8a8f98;
   /*
    * 가장 흐린 글자. 처음엔 Linear에서 본 #62666d를 그대로 썼는데 재보니 --bg 위에서
-   * 3.45:1이었다 — 눈으로 "충분히 보인다"고 판단했지 계산하지 않았던 것이다.
+   * 3.45:1이었다. 눈으로 "충분히 보인다"고 판단했지 계산하지 않았던 것이다.
    * 세 면(bg · surface · 네이비 패널) 모두에서 4.5:1을 넘는 가장 어두운 값으로 올렸다.
    * bg 5.31 · surface 5.08 · navy 4.80.
    */
@@ -159,7 +159,7 @@ a:focus-visible {
   /*
    * 이 면은 밝은 테마의 잔재였다(중간 파랑). 회색 계단은 --bg 위에서 대비를 맞춰 둔 값이라
    * 그보다 밝은 면 위에서는 --text-3가 3.34:1로 떨어졌다. 면을 어두운 쪽으로 내려
-   * 앱 전체가 같은 계단 위에 서게 했다 — 파란 정체성은 남기되 명도만 맞춘다.
+   * 앱 전체가 같은 계단 위에 서게 했다. 파란 정체성은 남기되 명도만 맞춘다.
    */
   color: var(--text);
   background: #0f1629;
@@ -552,7 +552,7 @@ button:disabled {
   gap: 20px;
   border-bottom: 1px solid var(--line);
   /* 스크롤이 뒤로 지나가므로 반투명이되, 어두운 쪽이어야 한다.
-     밝은 rgba가 남아 있어 대비 1.09:1이었다 — hex만 훑고 rgba를 놓쳤다. */
+     밝은 rgba가 남아 있어 대비 1.09:1이었다. hex만 훑고 rgba를 놓쳤다. */
   background: rgba(14, 16, 17, 0.92);
   backdrop-filter: blur(8px);
 }
@@ -604,7 +604,7 @@ button:disabled {
   display: grid;
   padding: 0 clamp(18px, 3vw, 36px);
   align-items: center;
-  /* 제목 / 초대 링크 / 멤버 — 초대 링크가 생기면서 세 칸이 됐다 */
+  /* 제목 / 초대 링크 / 멤버: 초대 링크가 생기면서 세 칸이 됐다 */
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 14px;
   border-bottom: 1px solid var(--line);
@@ -656,7 +656,7 @@ button:disabled {
 /*
  * 대화는 아래에서 쌓인다.
  *
- * 전에는 메시지가 적으면 위에 붙고 아래가 통째로 비었다. 메신저는 그러지 않는다 —
+ * 전에는 메시지가 적으면 위에 붙고 아래가 통째로 비었다. 메신저는 그러지 않는다.
  * 마지막 메시지가 입력창 바로 위에 있어야 한다. flex로 아래에 붙인다.
  */
 .message-timeline {
@@ -1121,7 +1121,7 @@ button:disabled {
 }
 
 /* 키보드 선택과 마우스 hover가 같은 표시를 쓴다. 둘이 다르면 지금 무엇이 선택됐는지
-   헷갈린다 — 그래서 hover에서도 active를 옮긴다(onMouseEnter). */
+   헷갈린다. 그래서 hover에서도 active를 옮긴다(onMouseEnter). */
 .palette-item.is-active {
   background: var(--accent-soft);
   color: var(--text);

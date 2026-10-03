@@ -1,4 +1,4 @@
-# 실시간 채팅 서비스 — 왕초보 학습 가이드
+# 실시간 채팅 서비스: 왕초보 학습 가이드
 
 > 이 문서는 **프로그래밍을 막 시작한 사람**도 이해할 수 있도록 작성했습니다.
 > 모든 기술 용어를 **일상생활 비유**로 먼저 설명하고, 그 다음에 코드를 봅니다.
@@ -10,32 +10,32 @@
 
 ### Part 1: 이거 뭐 만드는 거야?
 1. [카카오톡을 직접 만든다고?](#1-카카오톡을-직접-만든다고)
-2. [이 프로젝트에서 쓰는 기술들 — 쉬운 설명](#2-이-프로젝트에서-쓰는-기술들--쉬운-설명)
-3. [폴더 구조 — 회사 조직도처럼 이해하기](#3-폴더-구조--회사-조직도처럼-이해하기)
+2. [이 프로젝트에서 쓰는 기술들: 쉬운 설명](#2-이-프로젝트에서-쓰는-기술들-쉬운-설명)
+3. [폴더 구조: 회사 조직도처럼 이해하기](#3-폴더-구조-회사-조직도처럼-이해하기)
 
-### Part 2: 1차 구현 (MVP) — 일단 동작하게 만들기
-4. [STEP 1: 프로젝트 뼈대 — 집 짓기 전 설계도](#4-step-1-프로젝트-뼈대)
-5. [STEP 2: 데이터베이스 — 데이터를 어디에 저장하지?](#5-step-2-데이터베이스)
-6. [STEP 3: 로그인 — 너 누구야?](#6-step-3-로그인)
-7. [STEP 4: 채팅방 — 대화할 공간 만들기](#7-step-4-채팅방)
-8. [STEP 5: Kafka — 우체국 시스템](#8-step-5-kafka)
-9. [STEP 6: WebSocket + Redis — 실시간 배달](#9-step-6-websocket--redis)
+### Part 2: 1차 구현 (MVP): 일단 동작하게 만들기
+4. [STEP 1: 프로젝트 뼈대: 집 짓기 전 설계도](#4-step-1-프로젝트-뼈대)
+5. [STEP 2: 데이터베이스: 데이터를 어디에 저장하지?](#5-step-2-데이터베이스)
+6. [STEP 3: 로그인: 너 누구야?](#6-step-3-로그인)
+7. [STEP 4: 채팅방: 대화할 공간 만들기](#7-step-4-채팅방)
+8. [STEP 5: Kafka: 우체국 시스템](#8-step-5-kafka)
+9. [STEP 6: WebSocket + Redis: 실시간 배달](#9-step-6-websocket--redis)
 10. [STEP 7: 메시지 이력 + 읽음 표시](#10-step-7-메시지-이력--읽음-표시)
-11. [STEP 8: 테스트 — 진짜 잘 되는지 확인](#11-step-8-테스트)
-12. [메시지 여행기 — "안녕"이 전달되기까지](#12-메시지-여행기)
+11. [STEP 8: 테스트: 진짜 잘 되는지 확인](#11-step-8-테스트)
+12. [메시지 여행기: "안녕"이 전달되기까지](#12-메시지-여행기)
 
-### Part 3: 2차 구현 (운영 고려사항) — 진짜 서비스에 가까운 제약 다루기
+### Part 3: 2차 구현 (운영 고려사항): 진짜 서비스에 가까운 제약 다루기
 13. [STEP 9: 건강 검진 + 우아한 퇴장](#13-step-9-건강-검진--우아한-퇴장)
 14. [STEP 10: 도배 방지](#14-step-10-도배-방지)
 15. [STEP 11: 실패한 메시지 구조대](#15-step-11-실패한-메시지-구조대)
 16. [STEP 12: 접속 중 표시](#16-step-12-접속-중-표시)
 17. [STEP 13: 서버 여러 대로 늘리기](#17-step-13-서버-여러-대로-늘리기)
 
-### Part 4: 3차 구현 (모니터링 + 성능 최적화) — 더 빠르고 똑똑하게
+### Part 4: 3차 구현 (모니터링 + 성능 최적화): 더 빠르고 똑똑하게
 18. [STEP 14: 건강 상태판 만들기 (Prometheus + Grafana)](#18-step-14-건강-상태판-만들기)
 19. [STEP 15~16: 느린 쿼리 고치기 + 캐시](#19-step-1516-느린-쿼리-고치기--캐시)
-20. [STEP 17: DB 인덱스 — 책의 목차 만들기](#20-step-17-db-인덱스)
-21. [STEP 18~19: 부하 테스트 — 진짜 빠른지 증명하기](#21-step-1819-부하-테스트)
+20. [STEP 17: DB 인덱스: 책의 목차 만들기](#20-step-17-db-인덱스)
+21. [STEP 18~19: 부하 테스트: 진짜 빠른지 증명하기](#21-step-1819-부하-테스트)
 
 ### Part 5: 궁금할 수 있는 것들
 22. [자주 묻는 질문 (진짜 쉬운 버전)](#22-자주-묻는-질문)
@@ -70,7 +70,7 @@
 카카오톡 사용자가 1명이면 간단합니다. 하지만 **사용자가 많아지고 서버가 여러 대가 되면**?
 
 ```
-[간단한 버전 — 서버 1대]
+[간단한 버전: 서버 1대]
 
 사용자 A ──메시지──→ [서버 1대] ──전달──→ 사용자 B
 
@@ -81,7 +81,7 @@ A: 불가능! 서버를 여러 대로 늘려야 합니다.
 ```
 
 ```
-[현실 버전 — 서버 여러 대]
+[현실 버전: 서버 여러 대]
 
 사용자 A ─→ [서버 1] ─→ ???
 사용자 B ─→ [서버 2] ─→ ???
@@ -97,7 +97,7 @@ A: 불가능! 서버를 여러 대로 늘려야 합니다.
 
 이게 이 프로젝트의 전부입니다. **서버가 여러 대여도 메시지 저장 경로와 현재 연결된 사용자 fan-out 경로를 분리해 설명 가능하게** 만드는 것!
 
-### 전체 그림 — 택배 배송으로 이해하기
+### 전체 그림: 택배 배송으로 이해하기
 
 ```
 [현실 세계 택배]
@@ -137,9 +137,9 @@ A: 불가능! 서버를 여러 대로 늘려야 합니다.
 
 ---
 
-## 2. 이 프로젝트에서 쓰는 기술들 — 쉬운 설명
+## 2. 이 프로젝트에서 쓰는 기술들: 쉬운 설명
 
-### Spring Boot — "가게를 자동으로 차려주는 도구"
+### Spring Boot: "가게를 자동으로 차려주는 도구"
 
 여러분이 카페를 차린다고 상상해보세요.
 
@@ -168,19 +168,19 @@ public class HelloController {
 // 브라우저에서 http://localhost:8080/hello 접속하면 "안녕하세요!" 표시
 ```
 
-### JPA — "통역사"
+### JPA: "통역사"
 
 여러분은 Java로 말하고, 데이터베이스(DB)는 SQL이라는 언어를 씁니다.
 JPA는 Java와 DB 사이의 **통역사**입니다.
 
 ```
-[JPA 없이 — 직접 SQL 작성]
+[JPA 없이: 직접 SQL 작성]
 String sql = "INSERT INTO users (email, password, nickname) VALUES ('a@b.com', '1234', '홍길동')";
 connection.prepareStatement(sql).executeUpdate();
 
 → SQL 문법을 외워야 하고, 오타 나면 에러
 
-[JPA 사용 — Java 코드로 DB 조작]
+[JPA 사용: Java 코드로 DB 조작]
 User user = new User("a@b.com", "1234", "홍길동");
 userRepository.save(user);   // ← 이 한 줄이 위의 SQL을 대신함!
 
@@ -194,7 +194,7 @@ JPA 없이: 메뉴판이 프랑스어 → 프랑스어를 배워야 주문 가�
 JPA 사용: 한국어로 "스테이크 주세요" → 통역사가 프랑스어로 전달
 ```
 
-### JWT — "놀이공원 손목 밴드"
+### JWT: "놀이공원 손목 밴드"
 
 놀이공원에 가면 입장할 때 손목 밴드를 받죠? JWT가 바로 그겁니다.
 
@@ -222,7 +222,7 @@ eyJhbGciOiJIUzI1NiJ9        ← 봉투 (어떤 방식으로 서명했는지)
 누가 편지 내용을 바꾸면? → 봉인 도장이 안 맞음 → "위조!" 판별 가능
 ```
 
-### Kafka — "초대형 우체국"
+### Kafka: "초대형 우체국"
 
 ```
 [일반 우체국]
@@ -271,7 +271,7 @@ eyJhbGciOiJIUzI1NiJ9        ← 봉투 (어떤 방식으로 서명했는지)
    → 같은 방의 저장과 방송 순서가 뒤집히지 않음!
 ```
 
-### WebSocket — "전화 통화"
+### WebSocket: "전화 통화"
 
 ```
 [HTTP = 편지]
@@ -299,7 +299,7 @@ SEND:       "1번 방에 '안녕' 보내주세요" (메시지 전송)
 MESSAGE:    "1번 방에 새 메시지 왔어요!" (서버가 알려줌)
 ```
 
-### Redis — "화이트보드 + 방송 스피커"
+### Redis: "화이트보드 + 방송 스피커"
 
 ```
 [화이트보드 역할 = 캐시]
@@ -319,7 +319,7 @@ DB에서 찾기: 100만 건 메시지를 뒤져서 계산 → 3초 걸림
 → 서버가 몇 대든 Redis 스피커를 통해 전부 들을 수 있음!
 ```
 
-### Docker Compose — "가전제품 패키지"
+### Docker Compose: "가전제품 패키지"
 
 ```
 이 프로젝트를 실행하려면 이것들이 필요:
@@ -339,7 +339,7 @@ DB에서 찾기: 100만 건 메시지를 뒤져서 계산 → 3초 걸림
 → 30초 걸림
 ```
 
-### Testcontainers — "일회용 연습 환경"
+### Testcontainers: "일회용 연습 환경"
 
 ```
 테스트할 때 문제:
@@ -358,7 +358,7 @@ Testcontainers의 해결법:
 
 ---
 
-## 3. 폴더 구조 — 회사 조직도처럼 이해하기
+## 3. 폴더 구조: 회사 조직도처럼 이해하기
 
 이 프로젝트를 **회사**라고 생각해보세요:
 
@@ -435,7 +435,7 @@ src/main/java/com/realtime/chat/        ← 우리 회사
     └── BusinessException      → "이메일 중복!" 같은 업무 에러
 ```
 
-**DTO vs Entity — 왜 따로 만들어?**
+**DTO vs Entity: 왜 따로 만들어?**
 
 ```
 비유: 이력서 vs 주민등록등본
@@ -459,7 +459,7 @@ AuthResponse DTO: { token, userId, email, nickname }
 
 ---
 
-# Part 2: 1차 구현 (MVP) — 일단 동작하게 만들기
+# Part 2: 1차 구현 (MVP): 일단 동작하게 만들기
 
 > MVP = Minimum Viable Product (최소 동작 제품)
 > "모든 기능을 다 만들기 전에, 핵심 기능만 먼저 만들어서 동작하는지 확인하자!"
@@ -468,7 +468,7 @@ AuthResponse DTO: { token, userId, email, nickname }
 
 ## 4. STEP 1: 프로젝트 뼈대
 
-### build.gradle.kts — 쇼핑 목록
+### build.gradle.kts: 쇼핑 목록
 
 카페를 차릴 때 뭐가 필요할까요? 커피머신, 컵, 원두, 냉장고...
 프로젝트도 마찬가지로 "필요한 도구 목록"이 있습니다.
@@ -491,7 +491,7 @@ dependencies {
 }
 ```
 
-### docker-compose.yml — "한 번에 다 켜기"
+### docker-compose.yml: "한 번에 다 켜기"
 
 ```yaml
 services:
@@ -515,7 +515,7 @@ services:
     # → http://localhost:8090 에서 Kafka 토픽/메시지 확인 가능
 ```
 
-### application.yml — "앱 설정서"
+### application.yml: "앱 설정서"
 
 ```yaml
 spring:
@@ -553,7 +553,7 @@ jwt:
 4. "수령 완료"라고 이미 사인했으니 교환 불가!
 → 문제: 물건을 확인하기도 전에 "받았다"고 해버림
 
-[수동 확인 (auto-commit = false) — 우리 선택]
+[수동 확인 (auto-commit = false): 우리 선택]
 1. 택배가 도착
 2. 택배 뜯어서 물건 확인
 3. 물건 멀쩡함! → "수령 완료!" 사인
@@ -565,7 +565,7 @@ jwt:
 
 ## 5. STEP 2: 데이터베이스
 
-### 4개의 테이블 — 엑셀 시트라고 생각하세요
+### 4개의 테이블: 엑셀 시트라고 생각하세요
 
 ```
 📊 users 시트 (사용자)
@@ -601,10 +601,10 @@ jwt:
 │ 48 │ 6ba7b810-9dad-11d1-80b4-00c04f │    1    │    2     │ 반가워  │
 │ 50 │ f47ac10b-58cc-4372-a567-0e02b2 │    1    │    1     │ 뭐해?  │
 └────┴─────────────────────────────────┴─────────┴──────────┴─────────┘
-      ↑ 이게 뭐야? → "멱등성 키" — 아래에서 자세히 설명!
+      ↑ 이게 뭐야? → "멱등성 키": 아래에서 자세히 설명!
 ```
 
-### Entity — Java 클래스 = DB 테이블
+### Entity: Java 클래스 = DB 테이블
 
 ```java
 @Entity                          // "이 클래스는 DB 테이블이야!"
@@ -623,12 +623,12 @@ public class User {
 }
 ```
 
-### 멱등성(Idempotency) — "같은 택배를 두 번 받지 않는 방법"
+### 멱등성(Idempotency): "같은 택배를 두 번 받지 않는 방법"
 
 이 개념이 이 프로젝트에서 **정말 중요**합니다!
 
 ```
-[문제 상황 — 같은 메시지가 2번 저장됨]
+[문제 상황: 같은 메시지가 2번 저장됨]
 
 1. 사용자가 "안녕" 전송
 2. Kafka → Consumer가 "안녕"을 DB에 저장 ✓
@@ -636,7 +636,7 @@ public class User {
 4. 서버 재시작 → Kafka: "아까 그 메시지 처리 안 됐네? 다시 보내줄게"
 5. Consumer가 "안녕"을 또 DB에 저장 ← 같은 메시지가 2개!
 
-[해결 — messageKey (UUID)]
+[해결: messageKey (UUID)]
 
 각 메시지에 세상에서 유일한 ID를 부여:
 "안녕" → messageKey: "550e8400-e29b-41d4-a716-446655440000"
@@ -651,7 +651,7 @@ Consumer가 받을 때:
 "아, 이거 아까 받은 거잖아" → 반송!
 ```
 
-### Repository — "DB에 뭐 좀 해줘" 요청서
+### Repository: "DB에 뭐 좀 해줘" 요청서
 
 ```java
 public interface MessageRepository extends JpaRepository<Message, Long> {
@@ -688,7 +688,7 @@ exists + By + MessageKey
 
 ## 6. STEP 3: 로그인
 
-### 전체 흐름 — 놀이공원 입장
+### 전체 흐름: 놀이공원 입장
 
 ```
 [1단계: 회원가입 = 연간 회원 등록]
@@ -731,7 +731,7 @@ Headers: Authorization: Bearer eyJ...
 4. "1번 유저의 채팅방 목록" 조회해서 응답
 ```
 
-### 비밀번호 암호화 — 왜 그냥 저장하면 안 돼?
+### 비밀번호 암호화: 왜 그냥 저장하면 안 돼?
 
 ```
 [비밀번호를 그대로 저장하면]
@@ -752,7 +752,7 @@ DB: { email: "a@b.com", password: "$2a$10$N9qo8uLOickgx2ZMRZoMye..." }
 → 같으면 "비밀번호 맞음!", 다르면 "틀림!"
 ```
 
-### Spring Security 필터 체인 — "보안 검문소"
+### Spring Security 필터 체인: "보안 검문소"
 
 ```
 모든 HTTP 요청이 Controller에 도착하기 전에 여러 검문소를 거침:
@@ -782,7 +782,7 @@ HTTP 요청 도착
 
 ## 7. STEP 4: 채팅방
 
-### 1:1 채팅방 — "이미 대화한 적 있는지 확인"
+### 1:1 채팅방: "이미 대화한 적 있는지 확인"
 
 카카오톡에서 친구에게 1:1 채팅을 시작하면:
 - **처음이면**: 새 채팅방 생성
@@ -810,7 +810,7 @@ public ChatRoomResponse createDirectRoom(Long userId, CreateDirectRoomRequest re
 }
 ```
 
-### @AuthenticationPrincipal — "지금 로그인한 사람이 누구야?"
+### @AuthenticationPrincipal: "지금 로그인한 사람이 누구야?"
 
 ```java
 @PostMapping("/direct")
@@ -837,7 +837,7 @@ public ResponseEntity<ChatRoomResponse> createDirectRoom(
 
 ## 8. STEP 5: Kafka
 
-### Producer — "우체국에 편지 접수"
+### Producer: "우체국에 편지 접수"
 
 ```java
 public void sendMessage(ChatMessageEvent event) {
@@ -863,7 +863,7 @@ Kafka는 key를 기준으로 파티션(칸)을 정함:
 → 채팅에서 이러면 대화가 엉망이 됨
 ```
 
-### Consumer — "우체국에서 편지 수령"
+### Consumer: "우체국에서 편지 수령"
 
 ```java
 // Consumer Group 1: DB에 저장하는 팀
@@ -915,7 +915,7 @@ A 계좌에서 100만원 출금 → B 계좌에 100만원 입금
 
 ## 9. STEP 6: WebSocket + Redis
 
-### 메시지 전송 — "카카오톡 보내기 버튼 누르면"
+### 메시지 전송: "카카오톡 보내기 버튼 누르면"
 
 ```java
 // 클라이언트가 /app/chat.send로 보낸 메시지를 여기서 받음
@@ -945,7 +945,7 @@ public void sendMessage(@Payload SendMessageRequest request, Principal principal
 문제 1: DB 저장 실패하면? 메시지가 사라짐!
 문제 2: 서버 2대면? A는 서버1, B는 서버2 → 서버1이 B에게 못 보냄!
 
-[Kafka 경유 방식 — 우리 선택]
+[Kafka 경유 방식: 우리 선택]
 사용자A → 서버 → Kafka → MessagePersistenceConsumer
 → MessagePersistenceService.persist()가 DB 저장과 안읽은 수 갱신을 transaction commit
 → commit된 MessageResponse를 Redis room 채널과 발신자 PERSISTED 알림에 발행
@@ -957,7 +957,7 @@ public void sendMessage(@Payload SendMessageRequest request, Principal principal
 단점: Kafka 경유와 fan-out 단계가 추가되므로 send-to-receive 지연 시간은 별도 benchmark로 측정해야 함
 ```
 
-### MessagePersistenceConsumer — "저장한 뒤 방송"
+### MessagePersistenceConsumer: "저장한 뒤 방송"
 
 ```java
 PersistedMessageResult result =
@@ -975,7 +975,7 @@ ack.acknowledge();
 `result.message()`는 DB `id`와 `messageKey`를 가진 `MessageResponse`입니다. Redis room 발행이나 발신자
 PERSISTED 알림이 실패하면 ACK하지 않아 Kafka가 다시 전달하고, 이미 저장된 row를 멱등 재사용합니다.
 
-### Redis Pub/Sub — "사내 방송"
+### Redis Pub/Sub: "사내 방송"
 
 ```java
 // DB commit 뒤 MessagePersistenceConsumer가 호출
@@ -1016,13 +1016,13 @@ public void onMessage(String message, String channel) {
 
 ## 10. STEP 7: 메시지 이력 + 읽음 표시
 
-### 커서 기반 페이지네이션 — "인스타그램 스크롤"
+### 커서 기반 페이지네이션: "인스타그램 스크롤"
 
 채팅방에 메시지가 10,000개면 한 번에 다 보여줄 수 없겠죠?
 20개씩 나눠서 보여줘야 합니다.
 
 ```
-[잘못된 방법 — Offset]
+[잘못된 방법: Offset]
 "20번째부터 20개 보여줘"
 
   메시지: [1] [2] [3] ... [20] [21] [22] ... [40] [41] ...
@@ -1035,7 +1035,7 @@ public void onMessage(String message, String channel) {
   2페이지에서 "20번째부터" 하면:
   [18] [19] [20] → 1페이지에서 본 메시지가 또 나옴! (중복!)
 
-[올바른 방법 — Cursor (우리 선택)]
+[올바른 방법: Cursor (우리 선택)]
 "id=20보다 이전 것 20개 보여줘"
 
   메시지: [1] [2] [3] ... [20] [21] [22] ... [40]
@@ -1074,7 +1074,7 @@ public MessagePageResponse getMessages(Long roomId, Long cursor, int size) {
 → 추가 쿼리 없이 판단 가능! (빠름!)
 ```
 
-### 읽음 처리 — "카카오톡의 숫자 1"
+### 읽음 처리: "카카오톡의 숫자 1"
 
 ```
 카카오톡에서 "1"이 뜨는 원리:
@@ -1161,7 +1161,7 @@ Redis가 꺼지면? → 서류 캐비닛(DB)에 원본이 있으니까 괜찮음
 ### 단위 테스트 vs 통합 테스트
 
 ```
-[단위 테스트 — 부품 하나만 검사]
+[단위 테스트: 부품 하나만 검사]
 
 "AuthService의 회원가입 로직만 테스트"
 → 진짜 DB 안 쓰고, 가짜(Mock) DB 사용
@@ -1171,7 +1171,7 @@ Redis가 꺼지면? → 서류 캐비닛(DB)에 원본이 있으니까 괜찮음
 비유: 자동차 엔진만 따로 꺼내서 테스트
 → 차에 안 달아도 엔진 작동 확인 가능
 
-[통합 테스트 — 전체 조립 후 검사]
+[통합 테스트: 전체 조립 후 검사]
 
 "진짜 HTTP 요청 → 진짜 DB → 진짜 Kafka → 결과 확인"
 → Testcontainers로 PostgreSQL, Kafka, Redis를 진짜로 실행
@@ -1276,7 +1276,7 @@ void 회원가입_로그인_토큰인증_전체흐름() {
 
 ---
 
-# Part 3: 2차 구현 (운영 고려사항) — 진짜 서비스에 가까운 제약 다루기
+# Part 3: 2차 구현 (운영 고려사항): 진짜 서비스에 가까운 제약 다루기
 
 > 1차에서는 **"동작하는 채팅"**을 만들었습니다.
 > 2차에서는 **"운영에서 자주 만나는 제약을 일부 검증한 채팅"**으로 업그레이드합니다.
@@ -1287,7 +1287,7 @@ void 회원가입_로그인_토큰인증_전체흐름() {
 
 ## 13. STEP 9: 건강 검진 + 우아한 퇴장
 
-### Health Check — "서버야, 너 괜찮아?"
+### Health Check: "서버야, 너 괜찮아?"
 
 ```
 비유: 병원 건강 검진
@@ -1336,17 +1336,17 @@ K8s: "서버2가 응답 없어? 자동으로 새 서버 띄워줄게!"
 → 서버가 죽으면 자동으로 새 서버 생성 (자가 치유)
 ```
 
-### Graceful Shutdown — "퇴근 예절"
+### Graceful Shutdown: "퇴근 예절"
 
 ```
-[나쁜 퇴근 — 그냥 컴퓨터 끄기]
+[나쁜 퇴근: 그냥 컴퓨터 끄기]
 
 5시 땡! → 바로 전원 OFF
 → 작성 중이던 문서: 저장 안 됨! 날아감!
 → 처리 중이던 이메일: 절반만 보내짐!
 → 데이터베이스: 트랜잭션 깨짐!
 
-[좋은 퇴근 — Graceful Shutdown]
+[좋은 퇴근: Graceful Shutdown]
 
 5시 땡! →
 1. "새로운 업무는 안 받겠습니다" (새 요청 거부)
@@ -1378,7 +1378,7 @@ management:
 ```
 
 ```java
-// SecurityConfig.java — Health Check는 로그인 없이 접근 가능하게
+// SecurityConfig.java: Health Check는 로그인 없이 접근 가능하게
 .authorizeHttpRequests(auth -> auth
         .requestMatchers("/api/auth/**").permitAll()
         .requestMatchers("/ws/**").permitAll()
@@ -1420,7 +1420,7 @@ management:
 ```
 
 ```java
-// RateLimitInterceptor.java — 핵심 로직
+// RateLimitInterceptor.java: 핵심 로직
 
 // 이 인터셉터는 모든 WebSocket SEND 메시지에 대해 실행됨
 @Override
@@ -1446,7 +1446,7 @@ public Message<?> preSend(Message<?> message, MessageChannel channel) {
 ```
 
 ```java
-// RateWindow — 1초 윈도우 카운터
+// RateWindow: 1초 윈도우 카운터
 
 private static class RateWindow {
     private final AtomicLong windowStart = new AtomicLong(System.currentTimeMillis());
@@ -1474,12 +1474,12 @@ private static class RateWindow {
 ```
 비유: 은행 창구
 
-[일반 HashMap — 창구 1개]
+[일반 HashMap: 창구 1개]
 손님 A, B, C가 동시에 줄 서 있는데 창구가 1개
 → A가 처리되는 동안 B, C는 기다려야 함
 → 실수로 A, B가 동시에 접근하면 잔고가 꼬일 수 있음!
 
-[ConcurrentHashMap — 창구 여러 개 + 자동 안전장치]
+[ConcurrentHashMap: 창구 여러 개 + 자동 안전장치]
 → 여러 손님이 동시에 처리 가능
 → 자동으로 안전하게 처리 (데이터가 꼬이지 않음)
 
@@ -1525,7 +1525,7 @@ WebSocket 메시지 도착
 "왜 실패했는지 모름"
 "나중에 재처리하고 싶어도 방법 없음"
 
-[2차 — DLT(Dead Letter Topic) 도입]
+[2차: DLT(Dead Letter Topic) 도입]
 메시지 실패 → 3번 재시도 → 그래도 실패 → DLT에 보관! (증거 보존!)
 
 "어떤 메시지가 실패했는지 Kafka UI에서 확인 가능"
@@ -1556,7 +1556,7 @@ chat.messages → Consumer 처리 실패 (3회 재시도)
 ```
 
 ```java
-// KafkaConfig.java — DLT 설정
+// KafkaConfig.java: DLT 설정
 
 // DLT 토픽 생성 (앱 시작 시 자동)
 @Bean
@@ -1579,7 +1579,7 @@ private DeadLetterPublishingRecoverer deadLetterRecoverer(KafkaTemplate<String, 
 }
 ```
 
-### 에러 로깅 강화 — "범인 특정"
+### 에러 로깅 강화: "범인 특정"
 
 ```
 [1차 에러 로그]
@@ -1628,7 +1628,7 @@ private DeadLetterPublishingRecoverer deadLetterRecoverer(KafkaTemplate<String, 
 → 채팅방에서 "누가 지금 접속 중인지" 실시간으로 표시
 ```
 
-### 전체 설계 — 4단계
+### 전체 설계: 4단계
 
 ```
 [1단계: 감지]
@@ -1655,7 +1655,7 @@ Redis Pub/Sub로 모든 서버에 방송: "1번 유저가 접속했어요!"
 
 ### 각 단계 자세히
 
-**1단계: WebSocketEventListener — "문지기"**
+**1단계: WebSocketEventListener: "문지기"**
 
 ```java
 @Component
@@ -1700,7 +1700,7 @@ public class WebSocketEventListener {
 → 센서(Spring)가 알아서 감지하고 알려줌!
 ```
 
-**2단계: PresenceService — "출석부"**
+**2단계: PresenceService: "출석부"**
 
 ```java
 @Service
@@ -1743,7 +1743,7 @@ public class PresenceService {
 }
 ```
 
-**TTL(Time To Live) 60초 — 왜?**
+**TTL(Time To Live) 60초: 왜?**
 
 ```
 비유: 도서관 좌석 예약
@@ -1753,7 +1753,7 @@ public class PresenceService {
 [정상 퇴장]
 학생이 짐 싸고 나감 → "좌석 비었음" 표시 → OK!
 
-[비정상 퇴장 — 정전으로 건물 대피]
+[비정상 퇴장: 정전으로 건물 대피]
 학생이 짐도 못 챙기고 나감 → "좌석 사용 중" 그대로!
 → 영원히 "사용 중"으로 표시?!
 
@@ -1790,7 +1790,7 @@ public class PresenceService {
 "A가 접속 중"을 받고, 관계없는 방의 사용자는 받지 않습니다. room topic 구독 때도 서버가 멤버인지 확인합니다.
 ```
 
-### REST API — 채팅방 입장 시 초기 상태
+### REST API: 채팅방 입장 시 초기 상태
 
 ```java
 // GET /api/rooms/{roomId}/members/online
@@ -1819,7 +1819,7 @@ public ResponseEntity<Set<Long>> getOnlineMembers(@PathVariable Long roomId) {
 
 ## 17. STEP 13: 서버 여러 대로 늘리기
 
-### Dockerfile — "앱을 상자에 넣기"
+### Dockerfile: "앱을 상자에 넣기"
 
 Docker는 우리 앱을 **어디서든 실행할 수 있는 상자**에 담는 도구입니다.
 
@@ -1838,7 +1838,7 @@ Docker는 우리 앱을 **어디서든 실행할 수 있는 상자**에 담는 �
 ```
 
 ```dockerfile
-# 우리 Dockerfile — 2단계로 나눔 (Multi-stage Build)
+# 우리 Dockerfile: 2단계로 나눔 (Multi-stage Build)
 
 # 1단계: 요리 (빌드)
 FROM eclipse-temurin:21-jdk AS build    # Java 21 개발 도구 (도마, 칼, 냄비...)
@@ -1846,7 +1846,7 @@ WORKDIR /app
 COPY gradle/ gradle/
 COPY gradlew build.gradle.kts settings.gradle.kts ./
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon || true
-# ↑ 재료(의존성) 먼저 준비 — 다음에 요리할 때 이 단계는 건너뜀! (캐싱)
+# ↑ 재료(의존성) 먼저 준비: 다음에 요리할 때 이 단계는 건너뜀! (캐싱)
 
 COPY src/ src/
 RUN ./gradlew bootJar --no-daemon -x test
@@ -1877,7 +1877,7 @@ JRE(200MB) + JAR(50MB) = ~250MB
 → 서버에 배포할 때 다운로드 시간 절약
 ```
 
-### docker-compose — "서버 2대 동시 실행"
+### docker-compose: "서버 2대 동시 실행"
 
 ```yaml
 # docker-compose.yml에 추가된 부분
@@ -1905,7 +1905,7 @@ app-2:                           # 서버 2호 (설정 동일, 포트만 다름)
     depends_on: ...
 ```
 
-**환경변수 fallback — "어디서 실행되든 OK"**
+**환경변수 fallback: "어디서 실행되든 OK"**
 
 ```yaml
 # application.yml
@@ -1939,14 +1939,14 @@ healthcheck: pg_isready → "아직이요..." → "아직이요..." → "준비 
 → 그제서야 app-1 시작 → DB 연결 성공!
 ```
 
-### Kafka Consumer Group의 마법 — 자동 일 분배
+### Kafka Consumer Group의 마법: 자동 일 분배
 
 ```
 [서버 1대일 때]
 chat.messages 토픽 (파티션 6개)
 파티션 0, 1, 2, 3, 4, 5 → 전부 서버1의 Consumer가 처리
 
-[서버 2대로 늘리면? — 자동 리밸런싱!]
+[서버 2대로 늘리면?: 자동 리밸런싱!]
 파티션 0, 1, 2 → 서버1(app-1)의 Consumer
 파티션 3, 4, 5 → 서버2(app-2)의 Consumer
 
@@ -1964,7 +1964,7 @@ chat.messages 토픽 (파티션 6개)
 
 ### 통합 테스트
 
-**ConsumerRecoveryIntegrationTest — "Kafka 우체국이 잘 동작하는지 확인"**
+**ConsumerRecoveryIntegrationTest: "Kafka 우체국이 잘 동작하는지 확인"**
 
 ```java
 @Test
@@ -1987,7 +1987,7 @@ void duplicateMessageKey_shouldSaveOnlyOnce() {
 }
 ```
 
-**Awaitility — "비동기 작업 기다리기"**
+**Awaitility: "비동기 작업 기다리기"**
 
 ```
 비유: 피자 주문
@@ -1995,12 +1995,12 @@ void duplicateMessageKey_shouldSaveOnlyOnce() {
 "피자 주세요!" 하고 바로 "피자 왔어?"라고 확인하면?
 → 아직 만들고 있는데! 당연히 안 왔지!
 
-[Thread.sleep 방식 — 무조건 기다리기]
+[Thread.sleep 방식: 무조건 기다리기]
 Thread.sleep(5000);  // 5초 기다림
 "피자 왔어?" → 빠른 날은 2초면 되는데 5초나 기다림 (비효율)
              → 느린 날은 5초도 부족할 수 있음 (불안정)
 
-[Awaitility 방식 — 될 때까지 기다리기]
+[Awaitility 방식: 될 때까지 기다리기]
 await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
     assertThat(피자왔는지).isTrue();
 });
@@ -2011,7 +2011,7 @@ await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
 → 빠를 때는 빠르게, 느릴 때도 안전하게!
 ```
 
-**PresenceIntegrationTest — "접속 상태가 잘 동작하는지 확인"**
+**PresenceIntegrationTest: "접속 상태가 잘 동작하는지 확인"**
 
 ```java
 @Test
@@ -2124,7 +2124,7 @@ Grafana: Prometheus가 모은 데이터를 예쁜 그래프로 보여주는 역�
 ### 비유: 출석 확인
 
 ```
-[Before — N+1 문제]
+[Before: N+1 문제]
 선생님: "1반 학생 명단 주세요"
 교무실: (학생 명단을 줌)
 선생님: "1번 학생 정보 주세요" → 교무실 다녀옴
@@ -2133,14 +2133,14 @@ Grafana: Prometheus가 모은 데이터를 예쁜 그래프로 보여주는 역�
 ...10번 반복...
 → 교무실을 11번 왕복! (1번 명단 + 10번 개별)
 
-[After — JPQL 프로젝션]
+[After: JPQL 프로젝션]
 선생님: "1반 학생 이름, 출석 수, 과목 수 한 번에 주세요"
 교무실: (필요한 정보만 한 장에 정리해서 줌)
 → 교무실을 1번만 왕복!
 ```
 
 ```
-[캐시 — Redis Cache Aside]
+[캐시: Redis Cache Aside]
 선생님이 같은 반 명단을 5분 안에 또 물어보면?
 
 첫 번째: 교무실(DB)에 가서 가져옴 → 칠판(Redis)에 적어둠

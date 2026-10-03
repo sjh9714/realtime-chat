@@ -24,7 +24,7 @@ class ChatBotRulesTest {
   }
 
   @Test
-  @DisplayName("봇이 보낸 말에는 답하지 않는다 — 서로 끝없이 주고받는 것을 막는다")
+  @DisplayName("봇이 보낸 말에는 답하지 않는다. 서로 끝없이 주고받는 것을 막는다")
   void neverRepliesToABot() {
     assertThat(ChatBotRules.replyTo("@안내봇 도움", true)).isEmpty();
     assertThat(ChatBotRules.replyTo("/도움", true)).isEmpty();
