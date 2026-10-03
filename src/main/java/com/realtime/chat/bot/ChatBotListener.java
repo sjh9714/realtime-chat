@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
  * <p>사람이 보낸 메시지를 듣고 있다가 자기를 부르면 답한다.
  *
  * <p><b>답할 때도 파이프라인을 우회하지 않는다.</b> 소켓에 바로 찔러 넣지 않고
- * 사람과 똑같이 {@link ChatMessageProducer}로 보낸다 — Kafka → DB 커밋 → 브로드캐스트.
+ * 사람과 똑같이 {@link ChatMessageProducer}로 보낸다. Kafka → DB 커밋 → 브로드캐스트.
  * 그래야 봇의 말도 "저장된 뒤에만 전달된다"는 이 서비스의 약속 안에 들어온다.
  *
  * <p>저장 컨슈머와 <b>다른 그룹</b>으로 붙는다({@code chat-bot}). 여기서 무슨 일이 나도
@@ -49,7 +49,7 @@ public class ChatBotListener {
     try {
       reply(record.value());
     } catch (Exception e) {
-      log.warn("안내봇 응답 실패 — 넘어간다: {}", e.toString());
+      log.warn("안내봇 응답 실패: 넘어간다: {}", e.toString());
     } finally {
       ack.acknowledge();
     }

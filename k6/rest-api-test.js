@@ -105,13 +105,13 @@ export default function (data) {
         'Content-Type': 'application/json',
     };
 
-    // 1. 채팅방 목록 조회 (핵심 — N+1 vs JPQL 프로젝션 차이)
+    // 1. 채팅방 목록 조회 (핵심: N+1 vs JPQL 프로젝션 차이)
     const listRes = http.get(`${BASE_URL}/api/rooms`, { headers });
     check(listRes, {
         '채팅방 목록 조회 성공': (r) => r.status === 200,
     });
 
-    // 2. 채팅방 상세 조회 (랜덤 방 — 모든 유저가 멤버이므로 403 없음)
+    // 2. 채팅방 상세 조회 (랜덤 방: 모든 유저가 멤버이므로 403 없음)
     const roomId = data.roomIds[Math.floor(Math.random() * data.roomIds.length)];
     const detailRes = http.get(`${BASE_URL}/api/rooms/${roomId}`, { headers });
     check(detailRes, {

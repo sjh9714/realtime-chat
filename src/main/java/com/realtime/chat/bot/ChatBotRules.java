@@ -6,7 +6,7 @@ import java.util.Optional;
 /**
  * 안내봇이 무엇에 답할지 정하는 규칙.
  *
- * <p>순수 함수다 — 들어온 문장 하나로 답이 정해진다. 그래서 단위 테스트로 고정할 수 있고,
+ * <p>순수 함수다. 들어온 문장 하나로 답이 정해진다. 그래서 단위 테스트로 고정할 수 있고,
  * e2e에서도 매번 같은 답이 나온다. LLM을 붙이지 않은 이유가 이것이다(키도 비용도 없고,
  * 답이 흔들리면 캡처와 테스트가 같이 흔들린다).
  *
@@ -26,7 +26,7 @@ public final class ChatBotRules {
   /**
    * 답할 말을 정한다. 답하지 않아야 하면 비어 있다.
    *
-   * @param senderIsBot 보낸 이가 봇이면 답하지 않는다 — 봇끼리 무한히 주고받는 것을 막는다
+   * @param senderIsBot 보낸 이가 봇이면 답하지 않는다. 봇끼리 무한히 주고받는 것을 막는다
    */
   public static Optional<String> replyTo(String content, boolean senderIsBot) {
     if (senderIsBot) return Optional.empty();
@@ -55,9 +55,9 @@ public final class ChatBotRules {
     if (q.isEmpty() || q.contains("도움") || q.startsWith("help") || q.contains("뭐 할 수")) {
       return """
           이런 것들을 물어볼 수 있어요.
-          · /상태 — 지금 이 방의 참여자와 연결 상태
-          · /전달 — 메시지가 어떤 단계를 거쳐 도착하는지
-          · /초대 — 다른 사람을 이 대화로 부르는 방법""";
+          · /상태: 지금 이 방의 참여자와 연결 상태
+          · /전달: 메시지가 어떤 단계를 거쳐 도착하는지
+          · /초대: 다른 사람을 이 대화로 부르는 방법""";
     }
     if (q.contains("상태") || q.startsWith("status")) {
       return "이 방의 참여자는 위 목록에서 확인할 수 있어요. 접속 중인 사람 수는 방 제목 아래에 표시됩니다.";

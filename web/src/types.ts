@@ -51,7 +51,7 @@ export interface ChatMessage {
   roomId: number;
   senderId: number;
   senderNickname: string;
-  /** 보낸 이가 봇인가. 이름 옆 BOT 배지의 근거 — 서버의 users.bot에서 온다 */
+  /** 보낸 이가 봇인가. 이름 옆 BOT 배지의 근거: 서버의 users.bot에서 온다 */
   senderBot?: boolean;
   content: string;
   type: MessageType;

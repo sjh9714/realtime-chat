@@ -55,7 +55,7 @@ function sameDay(a: string, b: string) {
  * 연속 메시지를 묶는 간격.
  *
  * 메신저는 같은 사람이 이어 보낸 메시지에 이름과 아바타를 반복하지 않는다.
- * 5분은 Discord 실측이 아니라 통용값이다 — 남의 계정을 뒤져 간격을 재는 대신
+ * 5분은 Discord 실측이 아니라 통용값이다. 남의 계정을 뒤져 간격을 재는 대신
  * 흔히 쓰이는 값을 골랐다(`web/DESIGN.md`).
  */
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -166,7 +166,7 @@ export function Conversation({
           </p>
         </div>
         {/*
-          초대 링크. 1:1 대화에는 없다 — 서버가 DIRECT 방 참여를 거부한다.
+          초대 링크. 1:1 대화에는 없다. 서버가 DIRECT 방 참여를 거부한다.
           이게 있어야 이 앱이 "혼자 보는 화면"이 아니라 쓸 수 있는 메신저가 된다.
         */}
         {room.type === 'GROUP' && (
@@ -280,7 +280,7 @@ export function Conversation({
         <div className="composer-actions">
           {/*
             글자 수는 한도에 가까워질 때만 보여준다. 메신저가 언제나 `0/2,000`을
-            띄워 두지는 않는다 — 평소에는 알 이유가 없는 값이다.
+            띄워 두지는 않는다. 평소에는 알 이유가 없는 값이다.
           */}
           {content.length > 1800 && (
             <span role="status">{content.length.toLocaleString('ko-KR')}/2,000</span>

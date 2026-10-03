@@ -5,7 +5,7 @@
 > 측정이 아니므로 현재 코드의 성능 evidence로 사용하지 않습니다. 공개 성능 수치는 현재 commit에서
 > 환경·명령·raw artifact를 고정해 재측정한 뒤에만 갱신합니다.
 >
-> **2026-08-07 갱신** — receiver matrix(전달 완전성)는 현재 커밋 `18e7189`에서 커밋을 고정해
+> **2026-08-07 갱신**: receiver matrix(전달 완전성)는 현재 커밋 `18e7189`에서 커밋을 고정해
 > 재측정했습니다. 결과와 조건은 [WebSocket measurement 문서 §5-2-1-a](WEBSOCKET_MEASUREMENT.md)에
 > 있습니다. 이 배너는 **이 문서에 남아 있는 REST 조회 수치**에 대해 여전히 유효합니다.
 
@@ -85,7 +85,7 @@ SELECT m.* FROM chat_room_members m WHERE m.room_id = ?  -- 방 3의 멤버
 
 필요한 데이터는 단 6개 필드뿐이다:
 - `cr.id`, `cr.name`, `cr.type`, `cr.createdAt` (채팅방 기본 정보)
-- `memberCount` (멤버 수 — COUNT로 충분)
+- `memberCount` (멤버 수: COUNT로 충분)
 - `unreadCount` (읽지 않은 메시지 수)
 
 **핵심 질문:** Entity를 로드할 필요가 있는가? → **없다. DB 레벨에서 DTO로 직접 반환하면 된다.**
@@ -172,7 +172,7 @@ Execution Time: 0.392 ms
 **분석:**
 - `idx_chat_room_members_user_id` 인덱스로 해당 유저의 방만 필터링 (Bitmap Index Scan)
 - COUNT 서브쿼리는 `UNIQUE(room_id, user_id)` 인덱스를 사용 (Bitmap Index Scan)
-- 전체 실행 시간: **0.392ms** — 단일 쿼리로 모든 정보를 반환
+- 전체 실행 시간: **0.392ms**: 단일 쿼리로 모든 정보를 반환
 
 ---
 
@@ -221,7 +221,7 @@ Execution Time: 0.258 ms
 **분석:**
 - `messages_pkey` (id)로 역방향 스캔 후 `room_id` 필터링
 - `idx_messages_room_id_id(room_id, id DESC)` 복합 인덱스가 존재하지만, PostgreSQL 플래너가 PK 역순 스캔이 더 효율적이라 판단
-- `Rows Removed by Filter: 1393` — room_id 필터링으로 제거된 행. 데이터 분포에 따라 복합 인덱스가 더 유리할 수 있음
+- `Rows Removed by Filter: 1393`: room_id 필터링으로 제거된 행. 데이터 분포에 따라 복합 인덱스가 더 유리할 수 있음
 - 유저 JOIN에 `Memoize` 최적화 적용 (동일 sender 캐싱)
 - 실행 시간: **0.258ms**
 
@@ -243,7 +243,7 @@ Execution Time: 0.439 ms
 ```
 
 **분석:**
-- `UNIQUE(message_key)` 인덱스로 **Index Only Scan** — 테이블 접근 없이 인덱스만으로 결과 반환
+- `UNIQUE(message_key)` 인덱스로 **Index Only Scan**: 테이블 접근 없이 인덱스만으로 결과 반환
 - Kafka Consumer가 메시지마다 호출하는 쿼리이므로 인덱스 사용이 필수
 - 실행 시간: **0.439ms**
 
@@ -289,7 +289,7 @@ Execution Time: 0.080 ms
 
 **분석:**
 - `UNIQUE(room_id, user_id)` 제약 조건이 인덱스 역할 수행
-- **Index Only Scan** — 별도 인덱스 추가 없이 UK만으로 최적 성능
+- **Index Only Scan**: 별도 인덱스 추가 없이 UK만으로 최적 성능
 
 ### 2-3. 인덱스 설계
 
@@ -521,8 +521,8 @@ $ redis-cli TTL "rooms::1"
 
 **분석:**
 - **RPS 70.5% 증가:** 937 RPS → 1,598 RPS. 총 요청 수는 67,417건에서 118,900건으로 76.4% 증가
-- **주된 기여 — N+1 해결:** Before는 채팅방 목록 호출마다 약 21개 쿼리(1+10+10)를 실행하지만, After는 1개 쿼리로 통합. DB 부하 감소가 RPS 증가의 핵심 원인
-- **보조 기여 — Redis 캐싱:** 동일 유저의 반복 호출 시 DB 조회를 줄여 p50 개선에 기여했을 가능성이 있다. 이 테스트는 N+1 제거와 캐싱을 함께 적용한 결과이므로 캐시 단독 효과는 별도 분리 측정하지 않았다.
+- **주된 기여: N+1 해결:** Before는 채팅방 목록 호출마다 약 21개 쿼리(1+10+10)를 실행하지만, After는 1개 쿼리로 통합. DB 부하 감소가 RPS 증가의 핵심 원인
+- **보조 기여: Redis 캐싱:** 동일 유저의 반복 호출 시 DB 조회를 줄여 p50 개선에 기여했을 가능성이 있다. 이 테스트는 N+1 제거와 캐싱을 함께 적용한 결과이므로 캐시 단독 효과는 별도 분리 측정하지 않았다.
 - **테일 레이턴시(p95) 30% 개선:** Before의 p95 212ms에는 DB 커넥션 풀 경합에 의한 대기시간이 포함
 
 > **테스트 한계:** 이 시나리오는 **조회 전용**이며 메시지 전송이 포함되지 않는다.

@@ -345,7 +345,7 @@ src/main/java/com/realtime/chat/
     └── ChatMessageController.java ← WebSocket @MessageMapping
 ```
 
-### DTO vs Entity — 왜 분리하는가?
+### DTO vs Entity: 왜 분리하는가?
 
 ```
 [Entity]
@@ -365,7 +365,7 @@ AuthResponse:  { token, userId, email, nickname }  ← password 제외!
 
 ## 4. STEP 1: 프로젝트 뼈대
 
-### build.gradle.kts — 의존성 관리
+### build.gradle.kts: 의존성 관리
 
 프로젝트에서 사용하는 라이브러리를 선언하는 파일입니다.
 
@@ -398,7 +398,7 @@ lombok                        → 반복 코드 줄여줌 (@Getter 등)
 testcontainers                → 테스트용 Docker 자동 관리
 ```
 
-### docker-compose.yml — 인프라 구성
+### docker-compose.yml: 인프라 구성
 
 ```yaml
 services:
@@ -426,7 +426,7 @@ KRaft 모드: Kafka가 스스로 클러스터를 관리 → Zookeeper 불필요
 → 운영이 간단해짐
 ```
 
-### application.yml — 앱 설정
+### application.yml: 앱 설정
 
 ```yaml
 spring:
@@ -458,7 +458,7 @@ none:          아무것도 안 함
 → 운영 환경에서 더 안전한 방향이며, 권한/감사/모니터링은 별도 필요
 ```
 
-### Flyway migration — 테이블 생성
+### Flyway migration: 테이블 생성
 
 ```sql
 -- messages 테이블의 핵심 컬럼들
@@ -491,9 +491,9 @@ CREATE INDEX IF NOT EXISTS idx_messages_room_id_id ON messages(room_id, id DESC)
 
 ## 5. STEP 2: 데이터베이스 설계
 
-### Entity — DB 테이블과 Java 클래스 연결
+### Entity: DB 테이블과 Java 클래스 연결
 
-**User.java** — 사용자
+**User.java**: 사용자
 ```java
 @Entity                           // "이 클래스는 DB 테이블이야"
 @Table(name = "users")            // "테이블 이름은 users"
@@ -521,7 +521,7 @@ public class User {
 }
 ```
 
-**ChatRoom.java** — 채팅방
+**ChatRoom.java**: 채팅방
 ```java
 @Entity
 public class ChatRoom {
@@ -551,7 +551,7 @@ EAGER: 100개 방 + 100명 유저 = 불필요한 쿼리
 LAZY:  100개 방만 조회 = 효율적
 ```
 
-**Message.java** — 메시지
+**Message.java**: 메시지
 ```java
 @Entity
 public class Message {
@@ -579,7 +579,7 @@ public class Message {
 → "이미 저장된 메시지네" → 스킵
 ```
 
-### Repository — DB CRUD 인터페이스
+### Repository: DB CRUD 인터페이스
 
 ```java
 public interface MessageRepository extends JpaRepository<Message, Long> {
@@ -638,7 +638,7 @@ Headers: Authorization: Bearer eyJ...
     → Controller에서 @AuthenticationPrincipal Long userId로 접근
 ```
 
-### JwtTokenProvider.java — 토큰 생성/검증
+### JwtTokenProvider.java: 토큰 생성/검증
 
 ```java
 @Component
@@ -675,7 +675,7 @@ public class JwtTokenProvider {
 }
 ```
 
-### JwtAuthenticationFilter.java — 매 요청마다 토큰 확인
+### JwtAuthenticationFilter.java: 매 요청마다 토큰 확인
 
 ```java
 @Component
@@ -711,7 +711,7 @@ HTTP 요청 → [Filter 1] → [Filter 2] → ... → [JwtAuthFilter] → ... �
 → 기본 로그인 폼 대신 JWT 방식 사용
 ```
 
-### SecurityConfig.java — 보안 설정
+### SecurityConfig.java: 보안 설정
 
 ```java
 @Configuration
@@ -760,7 +760,7 @@ CSRF(Cross-Site Request Forgery): 다른 사이트에서 우리 서버에 요청
 
 ## 7. STEP 4: 채팅방 CRUD
 
-### 1:1 채팅방 — 중복 방지가 핵심
+### 1:1 채팅방: 중복 방지가 핵심
 
 ```java
 // ChatRoomService.java
@@ -803,7 +803,7 @@ B가 A에게 1:1 채팅 시작 → 방1을 열어줘야지, 방2를 만들면 �
 Optional<ChatRoom> findDirectRoomByUsers(...);
 ```
 
-### @AuthenticationPrincipal — 현재 로그인한 유저 가져오기
+### @AuthenticationPrincipal: 현재 로그인한 유저 가져오기
 
 ```java
 @PostMapping("/direct")
@@ -827,7 +827,7 @@ public ResponseEntity<ChatRoomResponse> createDirectRoom(
 
 ## 8. STEP 5: Kafka 메시지 파이프라인
 
-### KafkaConfig.java — 토픽과 Consumer 설정
+### KafkaConfig.java: 토픽과 Consumer 설정
 
 ```java
 @Configuration
@@ -883,7 +883,7 @@ public class KafkaConfig {
 → 나중에 관리자가 확인/처리
 ```
 
-### ChatMessageProducer.java — Kafka에 메시지 보내기
+### ChatMessageProducer.java: Kafka에 메시지 보내기
 
 ```java
 @Component
@@ -913,7 +913,7 @@ kafkaTemplate.send()는 비동기로 동작
 → 성공이면 로깅, 실패면 에러 로깅
 ```
 
-### MessagePersistenceConsumer.java — DB 저장 (Consumer Group 1)
+### MessagePersistenceConsumer.java: DB 저장 (Consumer Group 1)
 
 ```java
 @Component
@@ -965,7 +965,7 @@ public class MessagePersistenceConsumer {
 
 ## 9. STEP 6: WebSocket + Redis Pub/Sub
 
-### WebSocketConfig.java — STOMP 설정
+### WebSocketConfig.java: STOMP 설정
 
 ```java
 @Configuration
@@ -1016,7 +1016,7 @@ stompClient.connect(
 );
 ```
 
-### WebSocketAuthInterceptor.java — STOMP 연결 시 JWT 검증
+### WebSocketAuthInterceptor.java: STOMP 연결 시 JWT 검증
 
 ```java
 @Component
@@ -1054,7 +1054,7 @@ WebSocket: HTTP 업그레이드 후에는 Spring Security 필터를 안 탐!
 → ChannelInterceptor에서 CONNECT 프레임의 Authorization 헤더 검증
 ```
 
-### ChatMessageController.java — WebSocket 메시지 수신
+### ChatMessageController.java: WebSocket 메시지 수신
 
 ```java
 @Controller
@@ -1097,7 +1097,7 @@ public class ChatMessageController {
 단점: Kafka 경유와 fan-out 단계가 추가되므로 send-to-receive latency는 아직 추가 측정 예정
 ```
 
-### RedisPubSubService.java — 서버 간 브로드캐스트
+### RedisPubSubService.java: 서버 간 브로드캐스트
 
 ```java
 @Service
@@ -1137,7 +1137,7 @@ MessagePersistenceConsumer가 commit된 MessageResponse를 publish
 → 서버2: onMessage() → 사용자B에게 전달 ←┘
 ```
 
-### Commit 이후 persisted pipeline — PostgreSQL → Redis 연결
+### Commit 이후 persisted pipeline: PostgreSQL → Redis 연결
 
 ```java
 // MessagePersistenceConsumer
@@ -1280,7 +1280,7 @@ Redis가 죽어도 DB에 데이터 있으므로 서비스 가능
 
 ## 11. STEP 8: 테스트
 
-### BaseIntegrationTest — Testcontainers 설정
+### BaseIntegrationTest: Testcontainers 설정
 
 ```java
 @SpringBootTest(webEnvironment = RANDOM_PORT)  // 랜덤 포트로 실제 서버 실행
@@ -1704,7 +1704,7 @@ health 응답 예시:
 }
 ```
 
-### SecurityConfig.java — Health Check 허용
+### SecurityConfig.java: Health Check 허용
 
 ```java
 .authorizeHttpRequests(auth -> auth
@@ -1753,7 +1753,7 @@ Health Check는 로드 밸런서/K8s가 호출하는데,
 → 정상 사용자는 영향 없음 (사람이 1초에 10개 이상 타이핑 불가능)
 ```
 
-### RateLimitInterceptor.java — 핵심 코드
+### RateLimitInterceptor.java: 핵심 코드
 
 ```java
 @Component
@@ -1825,7 +1825,7 @@ AtomicInteger, AtomicLong도 같은 이유:
 → 간단하면서도 실용적인 방식
 ```
 
-### WebSocketConfig.java — 인터셉터 등록
+### WebSocketConfig.java: 인터셉터 등록
 
 ```java
 @Override
@@ -1881,7 +1881,7 @@ DLT = Dead Letter Topic (죽은 편지함)
 = 배달 실패한 우편물을 보관하는 곳
 ```
 
-### KafkaConfig.java — DLT 설정
+### KafkaConfig.java: DLT 설정
 
 ```java
 // DLT 토픽 생성
@@ -2006,7 +2006,7 @@ SessionConnectEvent 발생
 전역 채널을 직접 구독하지는 않습니다. 서버는 이벤트를 받으면 해당 사용자가 속한 room을 조회해
 room별 presence topic으로 나누고, 클라이언트는 현재 선택한 방의 인가된 topic만 구독합니다.
 
-### PresenceEvent.java — 상태 이벤트 DTO
+### PresenceEvent.java: 상태 이벤트 DTO
 
 ```java
 @Getter
@@ -2028,7 +2028,7 @@ public class PresenceEvent {
 }
 ```
 
-### PresenceService.java — Redis 기반 상태 관리
+### PresenceService.java: Redis 기반 상태 관리
 
 ```java
 @Service
@@ -2103,7 +2103,7 @@ public class PresenceService {
 → 체크 안 하면 퇴실 처리 (자동 오프라인)
 ```
 
-### WebSocketEventListener.java — 연결/해제 감지
+### WebSocketEventListener.java: 연결/해제 감지
 
 ```java
 @Component
@@ -2158,7 +2158,7 @@ SessionDisconnectEvent: WebSocket 연결 끊김 시 발생 (클라이언트가 �
 → 느슨한 결합 (Loose Coupling)
 ```
 
-### RedisConfig.java — Presence 채널 구독
+### RedisConfig.java: Presence 채널 구독
 
 ```java
 @Configuration
@@ -2198,7 +2198,7 @@ ChannelTopic("chat:presence")
 → Presence는 채널이 1개이므로 정확한 매칭 사용
 ```
 
-### RedisPubSubService.java — Presence 브로드캐스트
+### RedisPubSubService.java: Presence 브로드캐스트
 
 ```java
 // Redis 채널에 Presence 이벤트 발행 (서버 간 상태 공유)
@@ -2248,7 +2248,7 @@ SessionConnectEvent → WebSocketEventListener
 결과: 어느 서버에 연결되어 있든 사용자A와 같은 room을 선택해 구독한 멤버만 상태 변경을 수신합니다.
 ```
 
-### PresenceController.java — REST API
+### PresenceController.java: REST API
 
 ```java
 @RestController
@@ -2276,7 +2276,7 @@ public class PresenceController {
 
 ## 18. STEP 13: 스케일아웃 + 통합 테스트
 
-### Dockerfile — Multi-stage 빌드
+### Dockerfile: Multi-stage 빌드
 
 ```dockerfile
 # 1단계: 빌드 (JDK 필요)
@@ -2321,7 +2321,7 @@ RUN ./gradlew bootJar                                 ← 빌드
 → 빌드 시간 대폭 단축 (의존성 다시 다운로드 안 함)
 ```
 
-### docker-compose.yml — 멀티 인스턴스
+### docker-compose.yml: 멀티 인스턴스
 
 ```yaml
 # 애플리케이션 서버 (스케일아웃 검증용 2대)

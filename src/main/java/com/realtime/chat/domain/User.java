@@ -35,7 +35,7 @@ public class User {
    * 사람이 아니라 봇인가.
    *
    * <p>화면이 이름 옆에 BOT 배지를 그리는 근거다. 봇을 사람인 척 두면 읽는 사람이
-   * 오해하므로 표시한다 — Slack·Discord·카카오워크가 모두 그렇게 한다.
+   * 오해하므로 표시한다. Slack·Discord·카카오워크가 모두 그렇게 한다.
    */
   @Column(nullable = false)
   private boolean bot = false;
